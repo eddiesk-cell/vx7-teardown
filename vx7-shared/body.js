@@ -23,55 +23,179 @@ export function addBody(C) {
     return p;
   };
 
+
+  // ---- shell(): loft a chamfered cross-section along from -> to through profile stations [[t, halfWidth, halfDepth, forwardOffset], ...],
+  // cut into 6 sectors x 2 length bands (or every edge, for symmetric parts). Each cell is its own pullable armor part: 16 mm thick,
+  // 5 mm gaps for panel lines, graphite inner wall, white front/outer, graphite rear/inner, an orange strip on the outer edge, bolts.
+  const SECT = {
+    1: {front: [0], 'front-outer': [7], outer: [6], 'rear-outer': [5], rear: [4], inner: [1, 2, 3]},
+    '-1': {front: [0], 'front-outer': [1], outer: [2], 'rear-outer': [3], rear: [4], inner: [5, 6, 7]},
+    0: {front: [0], 'front-L': [7], 'side-L': [6], 'rear-L': [5], rear: [4], 'rear-R': [3], 'side-R': [2], 'front-R': [1]},
+  };
+  const DARK = new Set(['rear', 'inner', 'rear-L', 'rear-R']);
+  const ring8 = (w, d, ck = 0.3) => {
+    const c = ck * Math.min(w, d);
+    return [[w - c, d], [-(w - c), d], [-w, d - c], [-w, -(d - c)], [-(w - c), -d], [w - c, -d], [w, -(d - c)], [w, d - c]];
+  };
+  const stationAt = (P, t) => {
+    let i = 0;
+    while (i < P.length - 2 && t > P[i + 1][0]) i++;
+    const k = Math.min(1, Math.max(0, (t - P[i][0]) / (P[i + 1][0] - P[i][0])));
+    return [1, 2, 3].map((j) => P[i][j] + (P[i + 1][j] - P[i][j]) * k);
+  };
+  function shell(node, id, name, from, to, profile, o = {}) {
+    const {sx = 1, tags = [], omit = [], split = 0.5, th = 0.016, gap = 0.005, trim = true, dist, bolts = true} = o;
+    const A = new V3(...from);
+    const D = new V3(...to).sub(A);
+    const L = D.length();
+    const sectors = SECT[o.sym ? 0 : sx];
+    const station = (t, shrink) => {
+      const [w, d, dz] = stationAt(profile, t);
+      const pts = ring8(Math.max(0.01, w - shrink), Math.max(0.01, d - shrink), o.chamfer ?? 0.3);
+      const c = A.clone().addScaledVector(D, t);
+      return {c: c.clone().add(new V3(0, 0, dz)), pts: pts.map(([x, z]) => c.clone().add(new V3(x, 0, z + dz)))};
+    };
+    const bands = [[0, split], [split, 1]];
+    const made = [];
+    bands.forEach(([t0, t1], bi) => {
+      const ts = [t0 + gap / 2 / L, ...profile.map((p) => p[0]).filter((t) => t > t0 + gap / L && t < t1 - gap / L), t1 - gap / 2 / L];
+      for (const [sname, edges] of Object.entries(sectors)) {
+        if (omit.includes(`${sname}:${bi}`) || omit.includes(sname)) continue;
+        const chain = [edges[0], ...edges.map((e) => (e + 1) % 8)];
+        const dark = DARK.has(sname) || (o.darkSectors || []).includes(sname);
+        const col = dark ? COL.graphite : COL.white;
+        const Os = [];
+        const Is = [];
+        for (const t of ts) {
+          const so = station(t, 0);
+          const si = station(t, th);
+          const cut = (st) => {
+            const v = chain.map((k) => st.pts[k].clone());
+            // a gap between sector neighbours: pull the two end vertices along their edges
+            const n = v.length;
+            v[0].lerp(v[1], gap / 2 / Math.max(1e-3, v[0].distanceTo(v[1])));
+            v[n - 1].lerp(v[n - 2], gap / 2 / Math.max(1e-3, v[n - 1].distanceTo(v[n - 2])));
+            return v;
+          };
+          Os.push({v: cut(so), c: so.c});
+          Is.push({v: cut(si), c: si.c});
+        }
+        const all = Os.flatMap((s) => s.v);
+        const cen = all.reduce((a, v) => a.add(v), new V3()).multiplyScalar(1 / all.length);
+        const pos = [];
+        const colr = [];
+        const quad = (a, b, c, d, ref, sign, color) => {
+          const n = new V3().subVectors(b, a).cross(new V3().subVectors(c, a));
+          const mid = a.clone().add(b).add(c).add(d).multiplyScalar(0.25);
+          const flip = n.dot(mid.clone().sub(ref)) * sign < 0;
+          const q = flip ? [a, d, c, b] : [a, b, c, d];
+          for (const i of [0, 1, 2, 0, 2, 3]) {
+            pos.push(q[i].x - cen.x, q[i].y - cen.y, q[i].z - cen.z);
+            colr.push(color.r, color.g, color.b);
+          }
+        };
+        const cw = new THREE.Color(col);
+        const cg = new THREE.Color(COL.graphite);
+        const ns = Os.length;
+        const m = chain.length;
+        for (let s = 0; s < ns - 1; s++)
+          for (let k = 0; k < m - 1; k++) {
+            quad(Os[s].v[k], Os[s].v[k + 1], Os[s + 1].v[k + 1], Os[s + 1].v[k], Os[s].c, 1, cw);
+            quad(Is[s].v[k], Is[s].v[k + 1], Is[s + 1].v[k + 1], Is[s + 1].v[k], Is[s].c, -1, cg);
+          }
+        for (const s of [0, ns - 1]) for (let k = 0; k < m - 1; k++) quad(Os[s].v[k], Os[s].v[k + 1], Is[s].v[k + 1], Is[s].v[k], cen, 1, cw);
+        for (const k of [0, m - 1]) for (let s = 0; s < ns - 1; s++) quad(Os[s].v[k], Os[s + 1].v[k], Is[s + 1].v[k], Is[s].v[k], cen, 1, cw);
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geo.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
+        geo.computeVertexNormals();
+        const edgeSrc = geo.clone();
+        edgeSrc.deleteAttribute('color');
+        const mid = Os[Math.floor(ns / 2)];
+        const out = mid.v.reduce((a, v) => a.add(v), new V3()).multiplyScalar(1 / m).sub(mid.c);
+        out.y = 0;
+        const part = mkPart(node, `${id}-${sname}-${bi}`, `${name} ${sname.toUpperCase()} ${bi + 1}`, 'armor', {tags, pos: cen.toArray(), out: out.normalize().toArray(), dist: dist ?? 0.55 + 0.4 * hash(`${id}${sname}${bi}`), stage: 1});
+        const extra = new Merge();
+        const surf = (s, k, off) => Os[s].v[k].clone().sub(Os[s].c).setY(0).normalize().multiplyScalar(off).add(Os[s].v[k]);
+        // orange strip along the outer edge
+        if (trim && (sname === 'outer' || sname === 'side-L' || sname === 'side-R') && ns > 1) {
+          const tp = [];
+          const tc = [];
+          const k0 = chain.length - 1;
+          for (let s = 0; s < ns - 1; s++) {
+            const q = [surf(s, 0, 0.0015), surf(s + 1, 0, 0.0015), surf(s + 1, 0, 0.0015).lerp(Os[s + 1].v[1], 0.18), surf(s, 0, 0.0015).lerp(Os[s].v[1], 0.18)];
+            for (const i of [0, 1, 2, 0, 2, 3]) tp.push(q[i].x - cen.x, q[i].y - cen.y, q[i].z - cen.z);
+          }
+          void k0;
+          const tg = new THREE.BufferGeometry();
+          tg.setAttribute('position', new THREE.Float32BufferAttribute(tp, 3));
+          tg.computeVertexNormals();
+          extra.add(tg, {c: COL.orange});
+        }
+        // fasteners on the front and outer panels
+        if (bolts && !dark && ns > 1) {
+          const mk = Math.floor(chain.length / 2);
+          for (const s of [0, ns - 1]) {
+            const p0 = Os[s].v[mk - 1 >= 0 ? mk - 1 : 0].clone().lerp(Os[s].v[mk], 0.5);
+            const p1 = Os[Math.min(ns - 1, s === 0 ? 1 : ns - 2)].v[mk - 1 >= 0 ? mk - 1 : 0].clone().lerp(Os[Math.min(ns - 1, s === 0 ? 1 : ns - 2)].v[mk], 0.5);
+            const pp = p0.lerp(p1, 0.25);
+            const nrm = pp.clone().sub(Os[s].c).setY(0).normalize();
+            extra.add(cyl(0.011, 0.011, 0.009, 8), {p: [pp.x - cen.x + nrm.x * 0.003, pp.y - cen.y, pp.z - cen.z + nrm.z * 0.003], q: new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), nrm), c: COL.chrome});
+          }
+        }
+        addMesh(part, geo, 'armor', {edges: edgeSrc});
+        if (extra.g.length) addMesh(part, extra.build(), 'armor', {shadow: false});
+        made.push(part);
+      }
+    });
+    return made;
+  }
+  const hash = C.hash;
+
   // ---------------------------------------------------------------- pelvis
   {
     const p = frame(N.pelvis, 'pelvis-core', 'PELVIS CORE', ['hip'], {out: [0, -1, -0.3], dist: 0.55});
-    solid(p, new Merge().add(box(0.46, 0.26, 0.32, 0.03), {c: G}).add(box(0.16, 0.3, 0.36, 0.02), {p: [0, -0.06, 0], c: COL.dark}).add(box(0.5, 0.05, 0.28, 0.01), {p: [0, 0.1, 0], c: COL.steel}));
+    solid(p, new Merge().add(box(0.38, 0.2, 0.22, 0.03), {c: G}).add(box(0.14, 0.26, 0.26, 0.02), {p: [0, -0.06, 0], c: COL.dark}).add(box(0.5, 0.05, 0.28, 0.01), {p: [0, 0.1, 0], c: COL.steel}));
     const b = frame(N.pelvis, 'hip-beam', 'HIP CROSS-BEAM', ['hip'], {out: [0, -0.4, -1], dist: 0.5});
     const m = new Merge().add(cyl(0.04, 0.04, 0.7, 10), {p: [0, -0.12, 0], r: [0, 0, Math.PI / 2], c: G});
     for (const x of [-0.26, -0.1, 0.1, 0.26]) m.add(cyl(0.055, 0.055, 0.03, 12), {p: [x, -0.12, 0], r: [0, 0, Math.PI / 2], c: COL.steel});
     solid(b, m);
-    hexA(N.pelvis, 'pelvis-front', 'PELVIS FRONT PLATE', 0.32, 0.42, 0.04, [0, -0.05, 0.2], [-8, 0, 0], {trim: 'edge', cy: 0}, {c: 0.28, tp: 1, bt: 0.22});
-    hexA(N.pelvis, 'pelvis-rear', 'PELVIS REAR PLATE', 0.34, 0.34, 0.04, [0, -0.02, -0.2], [0, 180, 0], {trim: 'block'}, {tp: 0.9, bt: 0.5});
+    shell(N.pelvis, 'pelvis', 'PELVIS', [0, -0.2, 0], [0, 0.12, 0], [[0, 0.12, 0.13, 0], [0.3, 0.29, 0.19, 0.01], [0.7, 0.27, 0.17, 0], [1, 0.19, 0.13, 0]], {sym: true, chamfer: 0.55, tags: ['hip'], omit: ['rear-L:1', 'rear-R:1', 'rear:1'], trim: false});
     for (const [s, sx] of L2) {
       drum(N['hipAbd' + s], 'hip-drum-' + s, s + ' HIP DRUM', [sx * 0.2, 0, 0], sx, 0.2, 0.1, ['hip', 'leg' + s]);
-      hexA(N.pelvis, 'skirt-' + s, s + ' SKIRT PLATE', 0.16, 0.34, 0.04, [sx * 0.24, -0.3, 0.17], [-12, sx * 20, 0], {trim: 'stripe'}, {tp: 1, bt: 0.4});
     }
   }
   // ---------------------------------------------------------------- spine and waist: exposed rings, orange cables
-  segs(N.pelvis, 'spine-low', 'SPINE RING', [0, 0.1, 0], 2, 0.085, 0.07, ['waist', 'spine']);
-  segs(N.chest, 'spine-up', 'SPINE RING', [0, 0.04, 0], 3, 0.085, 0.07, ['waist', 'spine']);
+  segs(N.pelvis, 'spine-low', 'SPINE RING', [0, 0.12, 0], 3, 0.075, 0.065, ['waist', 'spine']);
   cable(N.pelvis, 'cable-waist', 'WAIST POWER CABLE', [[0.0, 0.0, 0.12], [0.05, 0.14, 0.1], [-0.03, 0.26, 0.09], [0, BODY.waistY, 0.05]], ['waist'], {n: 5, r: 0.013, out: [0, 0.2, 1], dist: 0.5});
   cable(N.pelvis, 'cable-waist-2', 'WAIST SIDE CABLE', [[0.0, 0.0, -0.12], [-0.06, 0.14, -0.08], [0.03, 0.26, -0.07], [0, BODY.waistY, -0.04]], ['waist'], {n: 3, r: 0.012, out: [0, 0.2, -1], dist: 0.5});
 
   // ---------------------------------------------------------------- chest: a V, white pectorals meeting at the reactor
   {
     const p = frame(N.chest, 'chest-frame', 'CHEST FRAME', ['torso'], {out: [0, 0.2, -1], dist: 0.6});
-    const sh = poly([[-0.07, 0.04], [0.07, 0.04], [0.25, 0.54], [0.3, 0.95], [-0.3, 0.95], [-0.25, 0.54]]);
-    const m = new Merge().add(ext(sh, 0.24, 0.015), {c: G}).add(box(0.62, 0.04, 0.28, 0.008), {p: [0, 0.94, 0], c: COL.steel});
-    for (const y of [0.18, 0.3, 0.42]) m.add(box(0.1 + y * 0.3, 0.014, 0.26, 0.003), {p: [0, y, 0.0], c: COL.dark});
+    const sh = poly([[-0.07, 0.03], [0.07, 0.03], [0.22, 0.4], [0.27, 0.66], [-0.27, 0.66], [-0.22, 0.4]]);
+    const m = new Merge().add(ext(sh, 0.24, 0.015), {c: G}).add(box(0.5, 0.04, 0.24, 0.008), {p: [0, 0.67, 0], c: COL.steel});
+    for (const y of [0.12, 0.22, 0.32]) m.add(box(0.1 + y * 0.3, 0.014, 0.22, 0.003), {p: [0, y, 0.0], c: COL.dark});
     solid(p, m, 'metal', {edges: ext(sh, 0.24, 0.015)});
     const b = frame(N.chest, 'back-frame', 'BACK FRAME', ['torso'], {out: [0, 0.2, -1], dist: 0.85});
-    const mb = new Merge().add(box(0.42, 0.7, 0.05, 0.01), {p: [0, 0.5, -0.17], c: G});
-    for (const y of [0.25, 0.4, 0.55, 0.7]) mb.add(box(0.38, 0.012, 0.012, 0.003), {p: [0, y, -0.2], c: COL.orange});
+    const mb = new Merge().add(box(0.4, 0.5, 0.05, 0.01), {p: [0, 0.36, -0.15], c: G});
+    for (const y of [0.15, 0.27, 0.39, 0.51]) mb.add(box(0.36, 0.012, 0.012, 0.003), {p: [0, y, -0.18], c: COL.orange});
     solid(b, mb);
+    // one lofted shell from the waist to the collar: a strong V, front panel left open on the reactor
+    shell(N.chest, 'chest', 'CHEST', [0, 0, 0], [0, 0.68, 0], [[0, 0.18, 0.15, 0], [0.3, 0.32, 0.19, 0.01], [0.62, 0.42, 0.21, 0.02], [0.9, 0.44, 0.18, 0], [1, 0.24, 0.13, 0]], {sym: true, chamfer: 0.8, tags: ['torso'], omit: ['front', 'rear-L:0', 'rear-R:0', 'rear:0'], trim: true});
     for (const [s, sx] of L2) {
-      armor(N.chest, 'pec-' + s, s + ' PECTORAL', side([[-0.1, -0.22], [0.17, -0.14], [0.2, 0.16], [0.1, 0.25], [-0.09, 0.2]], sx), 0.05, {p: [sx * 0.31, 0.68, 0.16], r: [-8, sx * 34, 0]}, {tags: ['torso'], trim: 'stripe', cy: 0.55});
-      hexA(N.chest, 'back-plate-' + s, s + ' BACK PLATE', 0.26, 0.5, 0.045, [sx * 0.17, 0.56, -0.2], [0, 180, 0], {tags: ['torso']}, {tp: 1, bt: 0.45});
       // sloped angular pauldron: a wedge tilted out and down, a front plate and a side plate
-      armor(N.chest, 'pauldron-' + s, s + ' PAULDRON', side([[-0.17, -0.13], [0.2, -0.1], [0.25, 0.08], [0.02, 0.2], [-0.17, 0.12]], sx), 0.05, {p: [sx * 0.5, 1.07, -0.01], r: [-90, 0, -sx * 26, 'ZYX']}, {tags: ['shoulder', 'shoulder' + s], trim: 'block', cy: 0.85, dist: 0.8});
-      hexA(N.chest, 'pauldron-side-' + s, s + ' PAULDRON SIDE', 0.22, 0.3, 0.04, [sx * 0.66, 0.93, 0], [0, sx * 90, 0], {tags: ['shoulder', 'shoulder' + s], trim: 'stripe', cy: 0.85}, {c: 0.3, tp: 1, bt: 0.5});
-      hexA(N.chest, 'pauldron-front-' + s, s + ' PAULDRON FRONT', 0.2, 0.2, 0.04, [sx * 0.5, 1.0, 0.18], [-20, sx * 18, 0], {tags: ['shoulder', 'shoulder' + s], trim: 'edge', cy: 0.85}, {c: 0.3, tp: 0.8, bt: 1});
+      armor(N.chest, 'pauldron-' + s, s + ' PAULDRON', side([[-0.15, -0.11], [0.17, -0.09], [0.21, 0.07], [0.02, 0.17], [-0.15, 0.1]], sx), 0.045, {p: [sx * 0.45, 0.8, -0.01], r: [-90, 0, -sx * 26, 'ZYX']}, {tags: ['shoulder', 'shoulder' + s], trim: 'block', cy: 0.62, dist: 0.8});
+      hexA(N.chest, 'pauldron-side-' + s, s + ' PAULDRON SIDE', 0.2, 0.26, 0.04, [sx * 0.6, 0.68, 0], [0, sx * 90, 0], {tags: ['shoulder', 'shoulder' + s], trim: 'stripe', cy: 0.62}, {c: 0.3, tp: 1, bt: 0.5});
+      hexA(N.chest, 'pauldron-front-' + s, s + ' PAULDRON FRONT', 0.18, 0.18, 0.04, [sx * 0.45, 0.74, 0.17], [-20, sx * 18, 0], {tags: ['shoulder', 'shoulder' + s], trim: 'edge', cy: 0.62}, {c: 0.3, tp: 0.8, bt: 1});
       const y = frame(N.chest, 'yoke-' + s, s + ' SHOULDER YOKE', ['shoulder', 'shoulder' + s], {out: [sx, 0.5, 0], dist: 0.55});
       solid(y, new Merge().add(box(0.1, 0.1, 0.3, 0.02), {p: [sx * 0.36, BODY.shY, 0], c: G}).add(cyl(0.17, 0.17, 0.03, 20), {p: [sx * 0.46, BODY.shY, 0], r: [0, 0, Math.PI / 2], c: COL.dark}));
     }
-    hexA(N.chest, 'sternum', 'STERNUM PLATE', 0.16, 0.3, 0.04, [0, 0.3, 0.17], [-6, 0, 0], {tags: ['torso'], trim: 'stripe'}, {c: 0.3, tp: 1, bt: 0.35});
-    hexA(N.chest, 'upper-chest', 'COLLAR PLATE', 0.26, 0.12, 0.04, [0, 0.97, 0.15], [-14, 0, 0], {tags: ['torso', 'head'], trim: 'block'}, {c: 0.4, tp: 0.7, bt: 1});
   }
   // ---------------------------------------------------------------- reactor
   {
     const T = ['reactor'];
-    const c = [0, 0.66, 0.17];
+    const c = [0, 0.48, 0.17];
     const h = mkPart(N.chest, 'reactor-housing', 'REACTOR HOUSING', 'reactor', {tags: T, pos: c, out: [0, 0, 1], dist: 0.7, stage: 2});
     const m = new Merge().add(annulus(0.2, 0.115, 0.1).rotateZ(Math.PI / 8), {c: G});
     for (const a of ring(8, 0, (t) => t)) m.add(cyl(0.011, 0.011, 0.014, 8), {p: [Math.cos(a) * 0.175, Math.sin(a) * 0.175, 0.055], r: [Math.PI / 2, 0, 0], c: COL.chrome});
@@ -87,15 +211,15 @@ export function addBody(C) {
     addMesh(gl, new THREE.SphereGeometry(0.062, 18, 12), 'glow', {args: ['#ffc15a', 0.95], shadow: false});
     for (const [s, sx] of L2) {
       const p = mkPart(N.chest, 'coolant-' + s, s + ' COOLANT PIPE', 'reactor', {tags: T, out: [sx, 0.4, 0.2], dist: 0.55, stage: 2});
-      const curve = new THREE.CatmullRomCurve3([new V3(sx * 0.17, 0.61, 0.15), new V3(sx * 0.24, 0.51, 0.08), new V3(sx * 0.34, 0.56, 0.0), new V3(sx * 0.42, 0.72, -0.02)]);
+      const curve = new THREE.CatmullRomCurve3([new V3(sx * 0.17, 0.43, 0.15), new V3(sx * 0.24, 0.33, 0.08), new V3(sx * 0.33, 0.38, 0.0), new V3(sx * 0.38, 0.54, -0.02)]);
       const mm = new Merge().add(new THREE.TubeGeometry(curve, 20, 0.016, 8), {c: COL.orange});
       for (const t of [0.05, 0.95]) mm.add(cyl(0.028, 0.028, 0.03, 10), {p: curve.getPointAt(t).toArray(), q: new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), curve.getTangentAt(t)), c: COL.chrome});
       solid(p, mm);
     }
   }
   // ---------------------------------------------------------------- neck, head
-  segs(N.chest, 'neck-ring', 'NECK RING', [0, BODY.neckY - 0.2, 0.02], 3, 0.065, 0.05, ['head', 'neck']);
-  cable(N.chest, 'cable-neck', 'NECK POWER CABLE', [[0.0, 0.62, 0.09], [0.04, 0.78, 0.09], [-0.02, 0.9, 0.07], [0, BODY.neckY + 0.01, 0.05]], ['head', 'neck'], {n: 5, out: [0, 0.3, 1], dist: 0.55});
+  segs(N.chest, 'neck-ring', 'NECK RING', [0, BODY.neckY - 0.12, 0.02], 3, 0.065, 0.05, ['head', 'neck']);
+  cable(N.chest, 'cable-neck', 'NECK POWER CABLE', [[0.0, 0.42, 0.09], [0.04, 0.54, 0.09], [-0.02, 0.64, 0.07], [0, BODY.neckY + 0.01, 0.05]], ['head', 'neck'], {n: 5, out: [0, 0.3, 1], dist: 0.55});
   {
     const T = ['head'];
     const k = frame(N.head, 'skull', 'SKULL FRAME', T, {out: [0, 0.3, -1], dist: 0.4});
@@ -118,14 +242,10 @@ export function addBody(C) {
     const T = ['arm' + s, s === 'R' ? 'blade' : 'shield'];
     bone(N['sh' + s], 'upper-bone-' + s, s + ' UPPER ARM BONE', [0, -0.06, 0], [0, -ARM.upper + 0.06, 0], 0.036, 0.03, T, {out: [sx * 0.3, 0, -0.5], dist: 0.35, rib: true});
     bone(N['el' + s], 'fore-bone-' + s, s + ' FOREARM BONE', [0, -0.06, 0], [0, -ARM.fore + 0.04, 0], 0.034, 0.028, T, {out: [sx * 0.3, 0, -0.5], dist: 0.35, rib: true});
+    shell(N['sh' + s], 'upper-arm-' + s, s + ' UPPER ARM', [0, -0.04, 0], [0, -ARM.upper + 0.02, 0], [[0, 0.13, 0.12, 0], [0.3, 0.125, 0.11, 0.01], [1, 0.08, 0.08, 0]], {sx, tags: T, omit: ['rear:1', 'inner:1'], darkSectors: ['front', 'outer', 'front-outer', 'rear-outer'], trim: true});
+    shell(N['el' + s], 'forearm-' + s, s + ' FOREARM', [0, -0.03, 0], [0, -ARM.fore + 0.02, 0], [[0, 0.09, 0.09, 0], [0.3, 0.17, 0.13, 0.01], [0.75, 0.13, 0.1, 0.01], [1, 0.08, 0.08, 0]], {sx, tags: T, omit: ['inner:1', 'rear:1'], trim: true});
     cable(N['sh' + s], 'cable-el-' + s, s + ' ELBOW CABLE', [[-sx * 0.03, -0.08, 0.06], [-sx * 0.03, -0.3, 0.08], [0, -0.5, 0.06], [0, -ARM.upper + 0.02, 0.04]], T, {out: [0, 0, 1], dist: 0.5});
-    cable(N.chest, 'cable-sh-' + s, s + ' SHOULDER CABLE', [[sx * 0.1, 0.58, 0.12], [sx * 0.22, 0.62, 0.13], [sx * 0.34, 0.76, 0.08], [sx * BODY.shX, BODY.shY - 0.02, 0.07]], ['shoulder', 'shoulder' + s], {out: [sx, 0.2, 1], dist: 0.5});
-    hexA(N['sh' + s], 'upper-arm-front-' + s, s + ' UPPER ARM PLATE', 0.14, 0.42, 0.04, [0, -0.31, 0.08], [0, 0, 0], {tags: T, col: G, trim: 'stripe'}, {tp: 1, bt: 0.45});
-    hexA(N['sh' + s], 'upper-arm-outer-' + s, s + ' UPPER ARM SIDE', 0.13, 0.34, 0.04, [sx * 0.075, -0.3, 0], [0, sx * 90, 0], {tags: T, col: G, trim: 'edge'}, {tp: 1, bt: 0.5});
-    hexA(N['el' + s], 'elbow-guard-' + s, s + ' ELBOW GUARD', 0.15, 0.15, 0.04, [0, 0.0, -0.09], [0, 180, 0], {tags: T, trim: 'block', cy: 0}, {c: 0.35, tp: 0.8, bt: 0.7});
-    hexA(N['el' + s], 'forearm-outer-' + s, s + ' FOREARM ARMOR', 0.2, 0.52, 0.05, [sx * 0.1, -0.34, 0.01], [0, sx * 90, 0], {tags: T, trim: 'stripe'}, {c: 0.18, tp: 1, bt: 0.45});
-    hexA(N['el' + s], 'forearm-top-' + s, s + ' FOREARM TOP', 0.17, 0.46, 0.045, [0, -0.32, 0.09], [0, 0, 0], {tags: T, trim: 'edge'}, {c: 0.2, tp: 1, bt: 0.45});
-    hexA(N['el' + s], 'forearm-inner-' + s, s + ' FOREARM INNER', 0.14, 0.4, 0.04, [-sx * 0.08, -0.32, 0.01], [0, -sx * 90, 0], {tags: T, trim: 'block'}, {tp: 1, bt: 0.45});
+    cable(N.chest, 'cable-sh-' + s, s + ' SHOULDER CABLE', [[sx * 0.1, 0.4, 0.12], [sx * 0.2, 0.44, 0.13], [sx * 0.3, 0.54, 0.08], [sx * BODY.shX, BODY.shY - 0.02, 0.07]], ['shoulder', 'shoulder' + s], {out: [sx, 0.2, 1], dist: 0.5});
   }
   // left hand: palm, four fingers (two phalanges), thumb
   {
@@ -158,16 +278,16 @@ export function addBody(C) {
     const T = ['armR', 'blade'];
     const f = frame(N.wristR, 'fist', 'HILT FIST', T, {out: [-0.3, -1, 0.3], dist: 0.4});
     solid(f, new Merge().add(box(0.13, 0.14, 0.09, 0.02), {p: [0, -0.07, 0.01], c: G}).add(cyl(0.05, 0.05, 0.05, 10), {r: [0, 0, Math.PI / 2], c: COL.steel}));
-    const BR = 160 * D2R;
+    const BR = 135 * D2R;
     const em = mkPart(N.wristR, 'blade-emitter', 'BLADE EMITTER HOUSING', 'frame', {tags: T, pos: [0, -0.15, 0.04], out: [-0.3, -0.8, 0.5], dist: 0.55, stage: 2});
-    em.group.rotation.x = BR;
+    em.group.rotation.set(BR, 0, -0.38);
     solid(em, new Merge().add(cyl(0.062, 0.062, 0.2, 14), {p: [0, 0.1, 0], c: G}).add(cyl(0.07, 0.07, 0.025, 14), {p: [0, 0.2, 0], c: COL.orange}).add(cyl(0.07, 0.07, 0.025, 14), {p: [0, 0.03, 0], c: COL.steel}).add(box(0.1, 0.05, 0.14, 0.01), {p: [0, 0.13, 0], c: COL.dark}));
     const bp = mkPart(N.wristR, 'blade', 'PLASMA BLADE', 'armor', {tags: T, pos: [0, -0.15, 0.04], out: [-0.4, -0.6, 0.7], dist: 0.9, stage: 1});
     bp.keep = true;
-    bp.group.rotation.x = BR;
+    bp.group.rotation.set(BR, 0, -0.38);
     const sh = (w, l, tip) => poly([[-w, 0], [w, 0], [w * 0.72, l - tip], [0, l], [-w * 0.72, l - tip]]);
-    addMesh(bp, ext(sh(0.045, 1.3, 0.32), 0.03, 0.006).translate(0, 0.22, 0), 'glow', {args: [COL.orange, 0.85], shadow: false});
-    addMesh(bp, ext(sh(0.026, 1.2, 0.3), 0.04, 0.004).translate(0, 0.24, 0), 'glow', {args: ['#ffd68a', 0.95], shadow: false});
+    addMesh(bp, ext(sh(0.045, 1.5, 0.38), 0.03, 0.006).translate(0, 0.22, 0), 'glow', {args: [COL.orange, 0.85], shadow: false});
+    addMesh(bp, ext(sh(0.026, 1.4, 0.36), 0.04, 0.004).translate(0, 0.24, 0), 'glow', {args: ['#ffd68a', 0.95], shadow: false});
   }
   // ---------------------------------------------------------------- legs: digitigrade, tapering to the knee, hock and ankle
   for (const [s, sx] of L2) {
@@ -204,35 +324,22 @@ export function addBody(C) {
     actuator('act-knee-' + s, s + ' KNEE ACTUATOR', th, [-sx * 0.12, -LEG.thigh + LEG.kA, 0], [-sx * 0.12, -LEG.kB, 0], [...T, 'knee'], kn);
     actuator('act-hock-' + s, s + ' HOCK ACTUATOR', kn, [-sx * 0.12, -LEG.shin + LEG.hA, 0], [-sx * 0.12, -LEG.hB, 0], [...T, 'foot'], hk);
     actuator('act-arm-' + s, s + ' ARM PISTON', N['sh' + s], [sx * 0.09, -ARM.upper + ARM.a, 0.0], [sx * 0.09, -ARM.b, 0], ['arm' + s, s === 'R' ? 'blade' : 'shield'], N['el' + s]);
-    // armor, sized for unit-length legs and stretched to the real segment lengths; wide at the top, narrow at the joint
-    const kt = LEG.thigh / 0.8;
-    const ks = LEG.shin / 0.78;
-    const km = LEG.meta / 0.62;
-    const hx = (par, k, id, name, w, h, d, p, r, o, shape) => hexA(par, id, name, w * 0.8, h * k, d, [p[0], p[1] * k, p[2]], r, o, shape);
-    hx(th, kt, 'thigh-front-' + s, s + ' THIGH PLATE', 0.3, 0.64, 0.05, [0, -0.4, 0.14], [0, 0, 0], {tags: T, trim: 'stripe'}, {c: 0.2, tp: 1, bt: 0.42});
-    hx(th, kt, 'thigh-outer-' + s, s + ' THIGH OUTER', 0.28, 0.6, 0.05, [sx * 0.13, -0.4, 0], [0, sx * 90, 0], {tags: T, trim: 'edge'}, {c: 0.2, tp: 1, bt: 0.45});
-    hx(th, kt, 'thigh-inner-' + s, s + ' THIGH INNER', 0.22, 0.5, 0.04, [-sx * 0.11, -0.4, 0], [0, -sx * 90, 0], {tags: T, trim: 'block'}, {tp: 1, bt: 0.45});
-    hx(th, kt, 'thigh-rear-' + s, s + ' THIGH REAR', 0.2, 0.5, 0.04, [0, -0.4, -0.11], [0, 180, 0], {tags: T, col: G, trim: 'stripe'}, {tp: 1, bt: 0.5});
-    hx(th, kt, 'thigh-cap-' + s, s + ' THIGH CAP', 0.2, 0.16, 0.045, [0, -0.1, 0.13], [-15, 0, 0], {tags: [...T, 'hip'], trim: 'edge'}, {c: 0.35, tp: 0.9, bt: 0.8});
+    // lofted leg shells: thigh bulging at 25%, shin and metatarsal tapering to the hock and ankle
+    shell(th, 'thigh-' + s, s + ' THIGH', [0, -0.06, 0], [0, -LEG.thigh, 0], [[0, 0.2, 0.17, 0], [0.25, 0.26, 0.2, 0.02], [0.7, 0.19, 0.16, 0.01], [1, 0.15, 0.13, 0]], {sx, tags: T, omit: ['inner:1', 'rear:0']});
+    shell(kn, 'shin-' + s, s + ' SHIN', [0, -0.05, 0], [0, -LEG.shin + 0.04, 0], [[0, 0.15, 0.14, 0.02], [0.3, 0.17, 0.15, 0.03], [1, 0.08, 0.08, 0]], {sx, tags: T, omit: ['inner:0', 'rear:1']});
+    shell(hk, 'meta-' + s, s + ' METATARSAL', [0, -0.03, 0], [0, -LEG.meta + 0.03, 0], [[0, 0.1, 0.1, 0], [1, 0.065, 0.06, 0.01]], {sx, tags: [...T, 'foot'], omit: ['inner:1'], bolts: false});
     hexA(th, 'knee-guard-' + s, s + ' KNEE GUARD', 0.2, 0.22, 0.05, [0, -LEG.thigh - 0.02, 0.13], [10, 0, 0], {tags: [...T, 'knee'], trim: 'block'}, {c: 0.3, tp: 0.6, bt: 1});
-    hx(kn, ks, 'shin-front-' + s, s + ' SHIN PLATE', 0.18, 0.4, 0.045, [0, -0.26, 0.1], [0, 0, 0], {tags: T, trim: 'stripe'}, {tp: 1, bt: 0.4});
-    hx(kn, ks, 'shin-outer-' + s, s + ' SHIN OUTER', 0.2, 0.6, 0.045, [sx * 0.09, -0.4, 0], [0, sx * 90, 0], {tags: T, trim: 'edge'}, {tp: 1, bt: 0.4});
-    hx(kn, ks, 'shin-inner-' + s, s + ' SHIN INNER', 0.15, 0.46, 0.04, [-sx * 0.09, -0.38, 0], [0, -sx * 90, 0], {tags: T, trim: 'block'}, {tp: 1, bt: 0.4});
-    hx(kn, ks, 'calf-' + s, s + ' CALF PLATE', 0.18, 0.34, 0.045, [0, -0.3, -0.1], [0, 180, 0], {tags: T, col: G, trim: 'stripe'}, {tp: 1, bt: 0.5});
     hexA(kn, 'hock-guard-' + s, s + ' HOCK GUARD', 0.16, 0.2, 0.045, [0, -LEG.shin + 0.02, -0.09], [0, 180, 0], {tags: [...T, 'foot'], trim: 'block'}, {c: 0.3, tp: 1, bt: 0.8});
-    hx(hk, km, 'meta-front-' + s, s + ' METATARSAL PLATE', 0.12, 0.45, 0.04, [0, -0.3, 0.07], [0, 0, 0], {tags: [...T, 'foot'], trim: 'stripe'}, {tp: 1, bt: 0.45});
-    hx(hk, km, 'meta-side-' + s, s + ' METATARSAL SIDE', 0.11, 0.38, 0.035, [sx * 0.055, -0.28, 0], [0, sx * 90, 0], {tags: [...T, 'foot'], trim: 'edge'}, {tp: 1, bt: 0.5});
-    hx(hk, km, 'spur-plate-' + s, s + ' SPUR PLATE', 0.09, 0.24, 0.035, [0, -0.2, -0.06], [0, 180, 0], {tags: [...T, 'foot'], col: G}, {tp: 1, bt: 0.5});
     hexA(ft, 'foot-top-' + s, s + ' FOOT COVER', 0.24, 0.22, 0.035, [0, -0.02, 0.14], [-90, 0, 0], {tags: [...T, 'foot'], trim: 'edge', cy: 0}, {c: 0.3, tp: 0.6, bt: 1});
     hexA(ft, 'heel-' + s, s + ' HEEL PLATE', 0.12, 0.12, 0.03, [0, -0.04, -0.07], [-90, 0, 0], {tags: [...T, 'foot'], col: G, cy: 0}, {tp: 0.8, bt: 1});
-    for (const [i, x] of [-0.11, 0, 0.11].entries()) {
+    for (const [i, x] of [-0.14, 0, 0.14].entries()) {
       const t = frame(ft, `toe-${s}${i + 1}`, `${s} CLAW TOE ${i + 1}`, [...T, 'foot'], {out: [x * 6, -0.3, 1], dist: 0.4});
       const a = new V3(x * 0.4, -0.03, 0.04);
-      const b = new V3(x * 1.3, -0.07, 0.3);
+      const b = new V3(x * 1.6, -0.07, 0.34);
       const sg = C.between(a, b);
-      solid(t, new Merge().add(cyl(0.032, 0.016, sg.len, 6), {p: sg.p, q: sg.q, c: G}).add(cyl(0.016, 0.0, 0.1, 6), {p: [x * 1.45, -0.095, 0.37], r: [Math.PI / 2 + 0.25, 0, 0], c: COL.ink}).add(new THREE.SphereGeometry(0.03, 8, 6), {p: a.toArray(), c: COL.steel}));
+      solid(t, new Merge().add(cyl(0.045, 0.022, sg.len, 6), {p: sg.p, q: sg.q, c: G}).add(cyl(0.022, 0.0, 0.12, 6), {p: [x * 1.75, -0.095, 0.42], r: [Math.PI / 2 + 0.25, 0, 0], c: COL.ink}).add(new THREE.SphereGeometry(0.03, 8, 6), {p: a.toArray(), c: COL.steel}));
       const mk = new THREE.Object3D();
-      mk.position.set(x * 1.45, -0.115, 0.4);
+      mk.position.set(x * 1.75, -0.115, 0.46);
       ft.add(mk);
       feet.push(mk);
     }

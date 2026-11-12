@@ -19,7 +19,7 @@ export const driveKin = (th) => ({
 // id, name, drive scale (module size scales down on small joints), J kg m2 (reflected load inertia), M static gravity moment N m
 export const DRIVES = [
   {id: 'neck', name: 'NECK', s: 0.45, J: 1.2, M: 35},
-  {id: 'waist', name: 'WAIST', s: 0.8, J: 18, M: 420},
+  {id: 'waist', name: 'WAIST', s: 0.55, J: 18, M: 420},
   {id: 'shL', name: 'L SHOULDER', s: 1, J: 9, M: 260},
   {id: 'shR', name: 'R SHOULDER', s: 1, J: 11, M: 300},
   {id: 'elL', name: 'L ELBOW', s: 0.7, J: 2.6, M: 70},
@@ -35,9 +35,9 @@ export const BASE_KW = 40;
 export const ACT = {bore: 0.05, rod: 0.028, stroke: 0.18};
 export const actLen = (a, b, gamma) => Math.sqrt(a * a + b * b - 2 * a * b * Math.cos(gamma));
 // leg: lengths, neutral bends (deg). Forward-positive angles throughout.
-export const BODY = {hipX: 0.34, waistY: 0.34, shX: 0.47, shY: 0.92, neckY: 1.04};
-export const LEG = {thigh: 0.8, shin: 0.82, meta: 0.52, kneeBend: 78, hockBend: 56, thighLean: 36, metaWorld: 14, abd: 20, kA: 0.26, kB: 0.26, hA: 0.22, hB: 0.22};
-export const ARM = {upper: 0.66, fore: 0.64, a: 0.2, b: 0.2};
+export const BODY = {hipX: 0.26, waistY: 0.26, shX: 0.4, shY: 0.62, neckY: 0.7};
+export const LEG = {thigh: 1.02, shin: 1.0, meta: 0.66, kneeBend: 78, hockBend: 56, thighLean: 36, metaWorld: 14, abdL: -1, abdR: 28, kA: 0.26, kB: 0.26, hA: 0.22, hB: 0.22};
+export const ARM = {abdL: 20, abdR: 30, upper: 0.75, fore: 0.75, a: 0.2, b: 0.2};
 
 // ---- sequences
 export const SEQ = {STANCE: {dur: 4}, STRIDE: {dur: 1.6}, STRIKE: {dur: 2.4}};
@@ -46,11 +46,13 @@ const kf = (t, k) => {
   for (let i = 1; i < k.length; i++) if (t <= k[i][0]) return k[i - 1][1] + (k[i][1] - k[i - 1][1]) * sm((t - k[i - 1][0]) / (k[i][0] - k[i - 1][0]));
   return k[k.length - 1][1];
 };
+// the resting stance every sequence starts from (deg, forward-positive)
+export const STANCE0 = {neck: 0, waist: 0, shL: 4, shR: 2, elL: 20, elR: 10, hipL: -9, hipR: 2, kneeL: 2, kneeR: 12, shield: 0, lean: 9};
 export function pose(seq, tau) {
   const T = SEQ[seq].dur;
   const t = ((tau % T) + T) % T;
   const w = (2 * Math.PI * t) / T;
-  const p = {neck: 0, waist: 0, shL: -4, shR: 4, elL: 18, elR: 26, hipL: -6, hipR: 14, kneeL: 14, kneeR: 6, shield: 0, lean: 7};
+  const p = {...STANCE0};
   if (seq === 'STANCE') {
     const s = Math.sin(w);
     Object.assign(p, {waist: 2 * s, neck: -2 * s, shL: p.shL + 2 * s, shR: p.shR - 2 * s, hipL: p.hipL + 1.5 * s, hipR: p.hipR - 1.5 * s, kneeL: p.kneeL + 2 * (1 - Math.cos(w)), kneeR: p.kneeR + 2 * (1 - Math.cos(w)), shield: 2 * s});

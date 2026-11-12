@@ -41,9 +41,10 @@ export function createStage({canvas}) {
       this.fn();
     }
   }
+  let floorOn = true;
   const floorVis = (v) => () => {
-    ground.visible = v;
-    shade.visible = v;
+    ground.visible = v && floorOn;
+    shade.visible = v && floorOn;
   };
   composer.addPass(new Toggle(floorVis(false)));
   composer.addPass(gtao);
@@ -145,5 +146,10 @@ export function createStage({canvas}) {
       sun.shadow.map = null;
     }
   };
-  return {renderer, scene, camera, composer, gtao, bloom, sun, mech, resize, frame, project, size, setQuality};
+  const setFloor = (v) => {
+    ground.visible = v;
+    shade.visible = v;
+    floorOn = v;
+  };
+  return {renderer, scene, camera, composer, gtao, bloom, sun, mech, resize, frame, project, size, setQuality, setFloor};
 }

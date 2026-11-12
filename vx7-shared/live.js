@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import {warmComposer} from 'teardown-kit/warm.js';
 import {createConsole, DISPLAY, ISOLATES, SEQS, VIEWS} from './console.js';
-import {DRIVES, GEAR, SEQ, driveKin, readout} from './kin.js';
+import {ARM, BODY, DRIVES, GEAR, LEG, SEQ, STANCE0, driveKin, readout} from './kin.js';
 import {createStage} from './stage.js';
 import {cursorAt, TOUR, TOUR_DURATION} from './tour.js';
 
@@ -474,6 +474,14 @@ export function runLive() {
       const b = new THREE.Box3();
       for (const p of mech.parts) if (p.kind !== 'armor' || p.id !== 'blade') b.expandByObject(p.group);
       return {min: b.min.toArray(), max: b.max.toArray(), pelvis: mech.N.pelvis.position.y};
+    },
+    floor(on) {
+      st.setFloor(on);
+    },
+    K: {LEG, ARM, BODY, STANCE0, V: VIEWS3},
+    renderNow() {
+      S.snap = true;
+      draw(0.0001, 0);
     },
     showUI(on) {
       ui.root.style.display = on ? '' : 'none';

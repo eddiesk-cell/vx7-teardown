@@ -106,7 +106,8 @@ try {
   });
   await shot('10-strike', () => {
     RESET();
-    LIVE.setSeq('STRIKE', 1.2);
+    LIVE.setSeq('STRIKE', 0.9);
+    LIVE.setView('side');
   });
   const checks = await run(() => {
     const n = (k) => LIVE.parts.filter((p) => p.kind === k).length;

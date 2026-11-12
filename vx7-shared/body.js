@@ -47,8 +47,8 @@ export function addBody(C) {
   // ---------------------------------------------------------------- chest: a V, white pectorals meeting at the reactor
   {
     const p = frame(N.chest, 'chest-frame', 'CHEST FRAME', ['torso'], {out: [0, 0.2, -1], dist: 0.6});
-    const sh = poly([[-0.07, 0.04], [0.07, 0.04], [0.25, 0.5], [0.3, 0.88], [-0.3, 0.88], [-0.25, 0.5]]);
-    const m = new Merge().add(ext(sh, 0.24, 0.015), {c: G}).add(box(0.62, 0.04, 0.28, 0.008), {p: [0, 0.86, 0], c: COL.steel});
+    const sh = poly([[-0.07, 0.04], [0.07, 0.04], [0.25, 0.54], [0.3, 0.95], [-0.3, 0.95], [-0.25, 0.54]]);
+    const m = new Merge().add(ext(sh, 0.24, 0.015), {c: G}).add(box(0.62, 0.04, 0.28, 0.008), {p: [0, 0.94, 0], c: COL.steel});
     for (const y of [0.18, 0.3, 0.42]) m.add(box(0.1 + y * 0.3, 0.014, 0.26, 0.003), {p: [0, y, 0.0], c: COL.dark});
     solid(p, m, 'metal', {edges: ext(sh, 0.24, 0.015)});
     const b = frame(N.chest, 'back-frame', 'BACK FRAME', ['torso'], {out: [0, 0.2, -1], dist: 0.85});
@@ -56,22 +56,22 @@ export function addBody(C) {
     for (const y of [0.25, 0.4, 0.55, 0.7]) mb.add(box(0.38, 0.012, 0.012, 0.003), {p: [0, y, -0.2], c: COL.orange});
     solid(b, mb);
     for (const [s, sx] of L2) {
-      armor(N.chest, 'pec-' + s, s + ' PECTORAL', side([[-0.1, -0.22], [0.17, -0.14], [0.2, 0.16], [0.1, 0.25], [-0.09, 0.2]], sx), 0.05, {p: [sx * 0.31, 0.62, 0.16], r: [-8, sx * 34, 0]}, {tags: ['torso'], trim: 'stripe', cy: 0.55});
-      hexA(N.chest, 'back-plate-' + s, s + ' BACK PLATE', 0.26, 0.5, 0.045, [sx * 0.17, 0.52, -0.2], [0, 180, 0], {tags: ['torso']}, {tp: 1, bt: 0.45});
+      armor(N.chest, 'pec-' + s, s + ' PECTORAL', side([[-0.1, -0.22], [0.17, -0.14], [0.2, 0.16], [0.1, 0.25], [-0.09, 0.2]], sx), 0.05, {p: [sx * 0.31, 0.68, 0.16], r: [-8, sx * 34, 0]}, {tags: ['torso'], trim: 'stripe', cy: 0.55});
+      hexA(N.chest, 'back-plate-' + s, s + ' BACK PLATE', 0.26, 0.5, 0.045, [sx * 0.17, 0.56, -0.2], [0, 180, 0], {tags: ['torso']}, {tp: 1, bt: 0.45});
       // sloped angular pauldron: a wedge tilted out and down, a front plate and a side plate
-      armor(N.chest, 'pauldron-' + s, s + ' PAULDRON', side([[-0.17, -0.13], [0.2, -0.1], [0.25, 0.08], [0.02, 0.2], [-0.17, 0.12]], sx), 0.05, {p: [sx * 0.5, 1.0, -0.01], r: [-90, 0, -sx * 26, 'ZYX']}, {tags: ['shoulder', 'shoulder' + s], trim: 'block', cy: 0.85, dist: 0.8});
-      hexA(N.chest, 'pauldron-side-' + s, s + ' PAULDRON SIDE', 0.22, 0.3, 0.04, [sx * 0.66, 0.86, 0], [0, sx * 90, 0], {tags: ['shoulder', 'shoulder' + s], trim: 'stripe', cy: 0.85}, {c: 0.3, tp: 1, bt: 0.5});
-      hexA(N.chest, 'pauldron-front-' + s, s + ' PAULDRON FRONT', 0.2, 0.2, 0.04, [sx * 0.5, 0.93, 0.18], [-20, sx * 18, 0], {tags: ['shoulder', 'shoulder' + s], trim: 'edge', cy: 0.85}, {c: 0.3, tp: 0.8, bt: 1});
+      armor(N.chest, 'pauldron-' + s, s + ' PAULDRON', side([[-0.17, -0.13], [0.2, -0.1], [0.25, 0.08], [0.02, 0.2], [-0.17, 0.12]], sx), 0.05, {p: [sx * 0.5, 1.07, -0.01], r: [-90, 0, -sx * 26, 'ZYX']}, {tags: ['shoulder', 'shoulder' + s], trim: 'block', cy: 0.85, dist: 0.8});
+      hexA(N.chest, 'pauldron-side-' + s, s + ' PAULDRON SIDE', 0.22, 0.3, 0.04, [sx * 0.66, 0.93, 0], [0, sx * 90, 0], {tags: ['shoulder', 'shoulder' + s], trim: 'stripe', cy: 0.85}, {c: 0.3, tp: 1, bt: 0.5});
+      hexA(N.chest, 'pauldron-front-' + s, s + ' PAULDRON FRONT', 0.2, 0.2, 0.04, [sx * 0.5, 1.0, 0.18], [-20, sx * 18, 0], {tags: ['shoulder', 'shoulder' + s], trim: 'edge', cy: 0.85}, {c: 0.3, tp: 0.8, bt: 1});
       const y = frame(N.chest, 'yoke-' + s, s + ' SHOULDER YOKE', ['shoulder', 'shoulder' + s], {out: [sx, 0.5, 0], dist: 0.55});
       solid(y, new Merge().add(box(0.1, 0.1, 0.3, 0.02), {p: [sx * 0.36, BODY.shY, 0], c: G}).add(cyl(0.17, 0.17, 0.03, 20), {p: [sx * 0.46, BODY.shY, 0], r: [0, 0, Math.PI / 2], c: COL.dark}));
     }
-    hexA(N.chest, 'sternum', 'STERNUM PLATE', 0.16, 0.3, 0.04, [0, 0.27, 0.17], [-6, 0, 0], {tags: ['torso'], trim: 'stripe'}, {c: 0.3, tp: 1, bt: 0.35});
-    hexA(N.chest, 'upper-chest', 'COLLAR PLATE', 0.26, 0.12, 0.04, [0, 0.9, 0.15], [-14, 0, 0], {tags: ['torso', 'head'], trim: 'block'}, {c: 0.4, tp: 0.7, bt: 1});
+    hexA(N.chest, 'sternum', 'STERNUM PLATE', 0.16, 0.3, 0.04, [0, 0.3, 0.17], [-6, 0, 0], {tags: ['torso'], trim: 'stripe'}, {c: 0.3, tp: 1, bt: 0.35});
+    hexA(N.chest, 'upper-chest', 'COLLAR PLATE', 0.26, 0.12, 0.04, [0, 0.97, 0.15], [-14, 0, 0], {tags: ['torso', 'head'], trim: 'block'}, {c: 0.4, tp: 0.7, bt: 1});
   }
   // ---------------------------------------------------------------- reactor
   {
     const T = ['reactor'];
-    const c = [0, 0.6, 0.17];
+    const c = [0, 0.66, 0.17];
     const h = mkPart(N.chest, 'reactor-housing', 'REACTOR HOUSING', 'reactor', {tags: T, pos: c, out: [0, 0, 1], dist: 0.7, stage: 2});
     const m = new Merge().add(annulus(0.2, 0.115, 0.1).rotateZ(Math.PI / 8), {c: G});
     for (const a of ring(8, 0, (t) => t)) m.add(cyl(0.011, 0.011, 0.014, 8), {p: [Math.cos(a) * 0.175, Math.sin(a) * 0.175, 0.055], r: [Math.PI / 2, 0, 0], c: COL.chrome});
@@ -87,7 +87,7 @@ export function addBody(C) {
     addMesh(gl, new THREE.SphereGeometry(0.062, 18, 12), 'glow', {args: ['#ffc15a', 0.95], shadow: false});
     for (const [s, sx] of L2) {
       const p = mkPart(N.chest, 'coolant-' + s, s + ' COOLANT PIPE', 'reactor', {tags: T, out: [sx, 0.4, 0.2], dist: 0.55, stage: 2});
-      const curve = new THREE.CatmullRomCurve3([new V3(sx * 0.17, 0.55, 0.15), new V3(sx * 0.24, 0.45, 0.08), new V3(sx * 0.34, 0.5, 0.0), new V3(sx * 0.42, 0.66, -0.02)]);
+      const curve = new THREE.CatmullRomCurve3([new V3(sx * 0.17, 0.61, 0.15), new V3(sx * 0.24, 0.51, 0.08), new V3(sx * 0.34, 0.56, 0.0), new V3(sx * 0.42, 0.72, -0.02)]);
       const mm = new Merge().add(new THREE.TubeGeometry(curve, 20, 0.016, 8), {c: COL.orange});
       for (const t of [0.05, 0.95]) mm.add(cyl(0.028, 0.028, 0.03, 10), {p: curve.getPointAt(t).toArray(), q: new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), curve.getTangentAt(t)), c: COL.chrome});
       solid(p, mm);
@@ -107,7 +107,7 @@ export function addBody(C) {
       const cheek = side([[0.05, 0.1], [-0.13, 0.13], [-0.2, 0.28], [0.0, 0.31], [0.11, 0.21]], sx);
       armor(N.head, 'helmet-side-' + s, s + ' HELMET CHEEK', cheek, 0.03, {p: [sx * 0.105, 0, 0], r: [0, sx * 90, 0]}, {tags: T, col: G, trim: 'edge', cy: 0.25, dist: 0.5, bolts: false});
       // fins sweep back and up at about 45 degrees
-      armor(N.head, 'fin-' + s, s + ' HELMET FIN', side([[0, 0], [0.3, 0.05], [0.04, 0.1]], sx), 0.012, {p: [sx * 0.08, 0.42, -0.08], r: [0, sx * 90, sx * 45]}, {tags: T, line: false, bolts: false, cy: 0.25, dist: 0.5});
+      armor(N.head, 'fin-' + s, s + ' HELMET FIN', side([[0, 0], [0.24, 0.04], [0.03, 0.08]], sx), 0.012, {p: [sx * 0.08, 0.42, -0.08], r: [0, sx * 90, sx * 38]}, {tags: T, line: false, bolts: false, cy: 0.25, dist: 0.5});
     }
     const vp = mkPart(N.head, 'visor', 'V VISOR', 'armor', {tags: T, pos: [0, 0.27, 0.2], out: [0, 0.2, 1], dist: 0.95, stage: 1});
     addMesh(vp, ext(poly([[-0.12, 0.06], [0, -0.06], [0.12, 0.06], [0.12, 0.1], [0, 0.0], [-0.12, 0.1]]), 0.02, 0.003), 'glow', {args: ['#ff9a2e', 0.85]});
@@ -166,8 +166,8 @@ export function addBody(C) {
     bp.keep = true;
     bp.group.rotation.x = BR;
     const sh = (w, l, tip) => poly([[-w, 0], [w, 0], [w * 0.72, l - tip], [0, l], [-w * 0.72, l - tip]]);
-    addMesh(bp, ext(sh(0.045, 1.3, 0.32), 0.03, 0.006).translate(0, 0.22, 0).rotateY(Math.PI / 2), 'glow', {args: [COL.orange, 0.85], shadow: false});
-    addMesh(bp, ext(sh(0.026, 1.2, 0.3), 0.04, 0.004).translate(0, 0.24, 0).rotateY(Math.PI / 2), 'glow', {args: ['#ffd68a', 0.95], shadow: false});
+    addMesh(bp, ext(sh(0.045, 1.3, 0.32), 0.03, 0.006).translate(0, 0.22, 0), 'glow', {args: [COL.orange, 0.85], shadow: false});
+    addMesh(bp, ext(sh(0.026, 1.2, 0.3), 0.04, 0.004).translate(0, 0.24, 0), 'glow', {args: ['#ffd68a', 0.95], shadow: false});
   }
   // ---------------------------------------------------------------- legs: digitigrade, tapering to the knee, hock and ankle
   for (const [s, sx] of L2) {
@@ -208,7 +208,7 @@ export function addBody(C) {
     const kt = LEG.thigh / 0.8;
     const ks = LEG.shin / 0.78;
     const km = LEG.meta / 0.62;
-    const hx = (par, k, id, name, w, h, d, p, r, o, shape) => hexA(par, id, name, w * 0.88, h * k, d, [p[0], p[1] * k, p[2]], r, o, shape);
+    const hx = (par, k, id, name, w, h, d, p, r, o, shape) => hexA(par, id, name, w * 0.8, h * k, d, [p[0], p[1] * k, p[2]], r, o, shape);
     hx(th, kt, 'thigh-front-' + s, s + ' THIGH PLATE', 0.3, 0.64, 0.05, [0, -0.4, 0.14], [0, 0, 0], {tags: T, trim: 'stripe'}, {c: 0.2, tp: 1, bt: 0.42});
     hx(th, kt, 'thigh-outer-' + s, s + ' THIGH OUTER', 0.28, 0.6, 0.05, [sx * 0.13, -0.4, 0], [0, sx * 90, 0], {tags: T, trim: 'edge'}, {c: 0.2, tp: 1, bt: 0.45});
     hx(th, kt, 'thigh-inner-' + s, s + ' THIGH INNER', 0.22, 0.5, 0.04, [-sx * 0.11, -0.4, 0], [0, -sx * 90, 0], {tags: T, trim: 'block'}, {tp: 1, bt: 0.45});

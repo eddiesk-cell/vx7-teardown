@@ -15,7 +15,7 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const sm = (x) => (x = clamp(x)) * x * (3 - 2 * x);
 const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
 const VIEWS3 = {
-  hero: {tx: 0, ty: 1.85, tz: 0, az: 18, el: 3, d: 10.2},
+  hero: {tx: 0, ty: 1.9, tz: 0, az: 18, el: 3, d: 8.7},
   front: {tx: 0, ty: 1.9, tz: 0, az: 0, el: 4, d: 11.6},
   side: {tx: 0, ty: 1.9, tz: 0, az: 90, el: 4, d: 11.6},
   back: {tx: 0, ty: 1.9, tz: 0, az: 180, el: 4, d: 11.6},
@@ -82,7 +82,19 @@ export function runLive() {
     const v = {...VIEWS3[S.view]};
     v.az += off.az + (disp.orbit ? 14 * (S.T - (S.orbit0 ?? 0)) : 0);
     v.el = clamp(v.el + off.el, -20, 80);
-    v.d *= off.k * (1 + 0.3 * sm(S.k));
+    v.d *= off.k;
+    if (S.k > 0.001 && !S.iso) {
+      // frame every part inside the 3D viewport (the region between the side panels and above the slider)
+      const {lo, hi} = mech.bounds();
+      const az = v.az * D2R;
+      const r = [Math.cos(az), -Math.sin(az)];
+      const xs = [lo.x, hi.x].flatMap((x) => [lo.z, hi.z].map((z) => x * r[0] + z * r[1]));
+      const bw = Math.max(...xs) - Math.min(...xs) + 0.7;
+      const bh = hi.y - lo.y + 0.7;
+      const dfit = Math.max(bh / 0.377, bw / 0.554) * 1.04;
+      v.d = Math.max(v.d, dfit);
+      v.ty += ((lo.y + hi.y) / 2 - v.ty) * sm(S.k * 3);
+    }
     if (S.iso) {
       const f = ISO[S.iso];
       const p = mech.worldPos(f.focus);

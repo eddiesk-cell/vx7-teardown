@@ -314,7 +314,7 @@ function core() {
       addMesh(g, m.build(), 'metal');
     };
     // 1 bearing: outer race fixed, inner race and the cage with balls turn at the output angle; bolt circles on the face plate
-    sub('bearing', 'CROSS-ROLLER BEARING', -11, -80, (p) => {
+    sub('bearing', 'CROSS-ROLLER BEARING', -11, -112, (p) => {
       const outer = new Merge().add(annulus(47, 38.5, 8), {c: COL.steel}).add(annulus(47, 44, 2), {p: [0, 0, -4], c: COL.graphite});
       for (const a of ring(12, 0, (t) => t)) outer.add(cyl(1.4, 1.4, 1.2, 8), {p: [Math.cos(a) * 45.5, Math.sin(a) * 45.5, -5.2], r: [Math.PI / 2, 0, 0], c: COL.chrome});
       outer.add(box(9, 3, 3, 0.5), {p: [0, 47, 0], c: COL.orange});
@@ -333,19 +333,19 @@ function core() {
       D.spin.bearing = {inner, cage};
     });
     // 2-5 the two planetary stages: ring (housing) separates from its gears
-    sub('ring2', 'STAGE 2 RING 72T', 0, -40, (p) => ringOf(p));
+    sub('ring2', 'STAGE 2 RING 72T', 0, -56, (p) => ringOf(p));
     sub('gears2', 'STAGE 2 GEARS', 0, 0, (p) => planetsOf('s2', p));
-    sub('gears1', 'STAGE 1 GEARS', 12, 40, (p) => planetsOf('s1', p));
-    sub('ring1', 'STAGE 1 RING 72T', 12, 80, (p) => ringOf(p));
+    sub('gears1', 'STAGE 1 GEARS', 12, 56, (p) => planetsOf('s1', p));
+    sub('ring1', 'STAGE 1 RING 72T', 12, 112, (p) => ringOf(p));
     // 6 stator with 24 copper coils, 7 rotor with 20 magnets and an encoder disc, 8 shaft collar and circlips
-    sub('stator', 'MOTOR STATOR', 26, 120, (p) => {
+    sub('stator', 'MOTOR STATOR', 26, 168, (p) => {
       const m = new Merge().add(annulus(43, 31, 12), {c: COL.graphite});
       for (const a of ring(24, 0, (t) => t)) m.add(box(5, 4, 11, 0.8), {p: [Math.cos(a) * 28.5, Math.sin(a) * 28.5, 0], r: [0, 0, a], c: COL.copper});
       for (const a of ring(24, 0, (t) => t)) m.add(box(2, 3, 12.4, 0.3), {p: [Math.cos(a) * 43, Math.sin(a) * 43, 0], r: [0, 0, a], c: COL.dark});
       for (const a of ring(8, 0, (t) => t)) m.add(cyl(1.4, 1.4, 1.2, 8), {p: [Math.cos(a) * 37, Math.sin(a) * 37, 6.5], r: [Math.PI / 2, 0, 0], c: COL.chrome});
       addMesh(p, m.build(), 'metal');
     });
-    sub('rotor', 'MOTOR ROTOR + ENCODER', 26, 160, (p) => {
+    sub('rotor', 'MOTOR ROTOR + ENCODER', 26, 224, (p) => {
       const rg = new THREE.Group();
       p.group.add(rg);
       const m = new Merge().add(annulus(24, 12, 10), {c: COL.dark}).add(cyl(3, 3, 34, 12), {r: [Math.PI / 2, 0, 0], c: COL.chrome});
@@ -358,7 +358,7 @@ function core() {
       addMesh({mats: p.mats, group: rg}, m.build(), 'metal').userData.part = p;
       D.spin.rotor = rg;
     });
-    sub('collar', 'SHAFT COLLAR + CIRCLIPS', 26, 200, (p) => {
+    sub('collar', 'SHAFT COLLAR + CIRCLIPS', 26, 280, (p) => {
       const cg = new THREE.Group();
       p.group.add(cg);
       const m = new Merge().add(cyl(7, 7, 6, 14), {p: [0, 0, 17], r: [Math.PI / 2, 0, 0], c: COL.steel}).add(annulus(8.5, 3.2, 0.8), {p: [0, 0, 13.2], c: COL.chrome}).add(annulus(8.5, 3.2, 0.8), {p: [0, 0, 20.8], c: COL.chrome});
@@ -454,7 +454,7 @@ export function buildMech() {
     for (const p of parts) {
       const e = Math.max(p.stage === 1 ? e1 : p.stage === 2 ? e2 : e3, p.pull, extra ? extra(p) : 0);
       p.e = e;
-      p.group.position.copy(p.home).addScaledVector(p.out, p.dist * e * (p.stage === 1 ? 2.1 : p.stage === 2 ? 1.9 : 1.8));
+      p.group.position.copy(p.home).addScaledVector(p.out, p.dist * e * (p.stage === 3 ? 1 : 1.1));
     }
     root.updateMatrixWorld(true);
   };
@@ -488,6 +488,33 @@ export function buildMech() {
       if (o.isMesh || o.isLineSegments) o.visible = o.isLineSegments ? edge > 0.02 : a > 0.01;
     });
   };
+  // explode layout: armor and frame leave along their own normal, pushed away from the body centre so limbs fan into a clean shell
+  {
+    setPose('STANCE', 0);
+    const c = new V3(0, 1.9, 0);
+    const wp = new V3();
+    const pq = new THREE.Quaternion();
+    for (const p of parts) {
+      if (p.stage === 3 || (p.kind === 'drive' && !p.sub)) continue;
+      p.group.getWorldPosition(wp);
+      p.parent.getWorldQuaternion(pq);
+      const bias = wp.clone().sub(c);
+      bias.y *= 0.4;
+      const w = p.out.clone().applyQuaternion(pq).add(bias.normalize().multiplyScalar(0.9)).normalize();
+      p.out.copy(w.applyQuaternion(pq.invert()));
+    }
+  }
+  const bounds = () => {
+    const lo = new V3(1e9, 1e9, 1e9);
+    const hi = new V3(-1e9, -1e9, -1e9);
+    const e = new V3();
+    for (const p of parts) {
+      e.setFromMatrixPosition(p.group.matrixWorld);
+      lo.min(e);
+      hi.max(e);
+    }
+    return {lo, hi};
+  };
   const gearCount = () => Object.values(drives).reduce((n, D) => n + ['s1', 's2'].reduce((m, st) => m + 2 + D.spin[st].planets.length, 0), 0);
   const worldTmp = new V3();
   const worldHome = new V3();
@@ -502,5 +529,5 @@ export function buildMech() {
     return worst;
   };
   const worldPos = (id, out = new V3()) => byId[id].group.getWorldPosition(out);
-  return {...C, setPose, applyExplode, tick, style, gearCount, homeError, worldPos};
+  return {...C, setPose, applyExplode, tick, style, gearCount, homeError, worldPos, bounds};
 }

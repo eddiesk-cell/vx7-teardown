@@ -29,36 +29,39 @@ try {
     await page.screenshot({path: path.join(OUT, name + '.png')});
     console.log('wrote', name);
   };
-  const reset = () => {
-    LIVE.isolate?.(null);
-    LIVE.reassemble?.();
-    LIVE.setDisplay?.('xray', false);
-    LIVE.setDisplay?.('labels', false);
-    LIVE.setExplode(0);
-    LIVE.setSeq('STANCE', 0.9);
-    LIVE.setView('hero');
-  };
-  await shot('01-hero', reset);
+  await run(() => {
+    window.RESET = () => {
+      LIVE.isolate(null);
+      LIVE.reassemble();
+      LIVE.setDisplay('xray', false);
+      LIVE.setDisplay('labels', false);
+      LIVE.setDisplay('orbit', false);
+      LIVE.setExplode(0);
+      LIVE.setSeq('STANCE', 0.9);
+      LIVE.setView('hero');
+    };
+  });
+  await shot('01-hero', () => RESET());
   await shot('02-xray', () => LIVE.setDisplay?.('xray', true));
   await shot('03-explode-armor', () => {
-    reset();
+    RESET();
     LIVE.setExplode(0.35);
   });
   await shot('04-explode-full', () => LIVE.setExplode(1), 1500);
   await shot('05-iso-shoulder', () => {
-    reset();
+    RESET();
     LIVE.isolate('SHOULDER');
   }, 2200);
   await shot('06-iso-knee', () => {
-    reset();
+    RESET();
     LIVE.isolate('KNEE');
   }, 2200);
   await shot('07-iso-reactor', () => {
-    reset();
+    RESET();
     LIVE.isolate('REACTOR');
   }, 2200);
   await shot('08-pulled-panel', () => {
-    reset();
+    RESET();
     LIVE.pull('pec-L');
     LIVE.pull('thigh-front-R');
   }, 1500);
@@ -69,7 +72,7 @@ try {
     LIVE.setView('hero');
   });
   await shot('10-strike', () => {
-    reset();
+    RESET();
     LIVE.setSeq('STRIKE', 1.2);
   });
   const checks = await run(() => {

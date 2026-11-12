@@ -85,7 +85,7 @@ export function createConsole(app, total) {
   add(`<div class="sm" style="left:152px;top:466px">KW OUTPUT</div>`);
   add(`<div style="position:absolute;left:38px;top:496px;width:234px;height:6px;background:#ececee;border-radius:3px"></div>`);
   const kwB = add(`<div style="position:absolute;left:38px;top:496px;height:6px;background:${C.or};border-radius:3px"></div>`);
-  add(`<div class="sm" style="left:38px;top:510px">40 KW BASE + SUM OF |TORQUE × SPEED|</div>`);
+  add(`<div class="sm" style="left:38px;top:510px">40 KW BASE + JOINT POWER</div>`);
   // 03 sequence
   panel(24, 550, 262, 82, 'SEQUENCE', '03');
   row(SEQS, Object.fromEntries(SEQS.map((s) => [s, s])), 38, 580, 234, 'seq-', 3);

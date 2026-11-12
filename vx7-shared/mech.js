@@ -127,6 +127,7 @@ function core() {
   }
   const useMat = (p, kind, ...args) => {
     const m = MATS[kind](...args);
+    m.transparent = true; // always blended at alpha 1: toggling it would recompile the shader
     p.mats.push({m, base: m.opacity, e0: m.emissive ? m.emissiveIntensity : 0});
     return m;
   };
@@ -467,7 +468,6 @@ export function buildMech() {
     p._k = key;
     for (const {m, base, e0} of p.mats) {
       m.opacity = base * a;
-      m.transparent = a < 0.999 || base < 1;
       m.depthWrite = a > 0.5;
       if (m.emissive) {
         if (e0 > 0) m.emissiveIntensity = e0;

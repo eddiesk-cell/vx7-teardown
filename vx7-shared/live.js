@@ -15,10 +15,10 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const sm = (x) => (x = clamp(x)) * x * (3 - 2 * x);
 const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
 const VIEWS3 = {
-  hero: {tx: 0, ty: 1.9, tz: 0, az: 22, el: 6, d: 8.4},
-  front: {tx: 0, ty: 1.9, tz: 0, az: 0, el: 4, d: 8.4},
-  side: {tx: 0, ty: 1.9, tz: 0, az: 90, el: 4, d: 8.4},
-  back: {tx: 0, ty: 1.9, tz: 0, az: 180, el: 4, d: 8.4},
+  hero: {tx: 0, ty: 1.9, tz: 0, az: 22, el: 6, d: 11.6},
+  front: {tx: 0, ty: 1.9, tz: 0, az: 0, el: 4, d: 11.6},
+  side: {tx: 0, ty: 1.9, tz: 0, az: 90, el: 4, d: 11.6},
+  back: {tx: 0, ty: 1.9, tz: 0, az: 180, el: 4, d: 11.6},
 };
 // isolate specs: which parts stay solid, where the camera flies, how close
 const ISO = {
@@ -39,7 +39,7 @@ const LABELS = [
 
 export function runLive() {
   const style = document.createElement('style');
-  style.textContent = `html,body{margin:0;background:#d9dadd;overflow:hidden}#app{position:absolute;left:0;top:0;width:${W}px;height:${H}px;transform-origin:0 0}#gl{touch-action:none;cursor:grab;position:absolute;left:0;top:0;width:${W}px;height:${H}px}#gl.drag{cursor:grabbing}.tourchip{position:absolute;left:800px;top:20px;transform:translateX(-50%);display:flex;align-items:center;gap:7px;height:22px;padding:0 11px;border:1px solid #e3e4e7;border-radius:4px;background:rgba(250,250,248,.95);color:#23262b;font:700 9px 'JetBrains Mono',monospace;letter-spacing:1.3px;white-space:nowrap;cursor:pointer;pointer-events:auto}.tourchip i{display:block;width:6px;height:6px;border-radius:50%;background:#f08a24}.tourchip.on i{animation:blink 1.2s steps(2) infinite}@keyframes blink{50%{opacity:.15}}`;
+  style.textContent = `html,body{margin:0;background:#d9dadd;overflow:hidden}#app{position:absolute;left:0;top:0;width:${W}px;height:${H}px;transform-origin:0 0}#gl{touch-action:none;cursor:grab;position:absolute;left:0;top:0;width:${W}px;height:${H}px}#gl.drag{cursor:grabbing}.tourchip{position:absolute;left:1010px;top:22px;transform:translateX(-50%);display:flex;align-items:center;gap:7px;height:22px;padding:0 11px;border:1px solid #e3e4e7;border-radius:4px;background:rgba(250,250,248,.95);color:#23262b;font:700 9px 'JetBrains Mono',monospace;letter-spacing:1.3px;white-space:nowrap;cursor:pointer;pointer-events:auto}.tourchip i{display:block;width:6px;height:6px;border-radius:50%;background:#f08a24}.tourchip.on i{animation:blink 1.2s steps(2) infinite}@keyframes blink{50%{opacity:.15}}`;
   document.head.appendChild(style);
   const app = document.getElementById('app');
   const canvas = document.createElement('canvas');
@@ -82,7 +82,7 @@ export function runLive() {
     const v = {...VIEWS3[S.view]};
     v.az += off.az + (disp.orbit ? 14 * (S.T - (S.orbit0 ?? 0)) : 0);
     v.el = clamp(v.el + off.el, -20, 80);
-    v.d *= off.k * (1 + 0.55 * sm(S.k));
+    v.d *= off.k * (1 + 0.42 * sm(S.k));
     if (S.iso) {
       const f = ISO[S.iso];
       const p = mech.worldPos(f.focus);
@@ -148,8 +148,9 @@ export function runLive() {
         if (snap) p.raw = p.pull = 0;
       }
       S.kT = 0;
+      S.iso = null;
       disp.exploded = 0;
-      if (snap) S.k = 0;
+      if (snap) S.k = S.isoE = 0;
     },
   };
   const press = (key) => {

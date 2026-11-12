@@ -24,6 +24,7 @@ try {
   await run(() => LIVE.takeOver());
   const shot = async (name, setup, wait = 1200) => {
     if (only.length && !only.includes(name.slice(0, 2))) return;
+    await run(() => LIVE.takeOver());
     await run(setup);
     await page.waitForTimeout(wait);
     await page.screenshot({path: path.join(OUT, name + '.png')});
@@ -71,6 +72,10 @@ try {
     LIVE.setExplode(0);
     LIVE.setView('hero');
   });
+  await shot('11-head', () => {
+    RESET();
+    LIVE.isolate('HEAD');
+  }, 2200);
   await shot('10-strike', () => {
     RESET();
     LIVE.setSeq('STRIKE', 1.2);

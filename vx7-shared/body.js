@@ -88,15 +88,16 @@ export function addBody(C) {
     const T = ['head'];
     const k = frame(N.head, 'skull', 'SKULL FRAME', T, {out: [0, 0.3, -1], dist: 0.4});
     solid(k, new Merge().add(box(0.2, 0.22, 0.26, 0.02), {p: [0, 0.22, -0.02], c: G}).add(cyl(0.05, 0.05, 0.05, 12), {p: [0, 0.05, 0], r: [0, 0, Math.PI / 2], c: COL.steel}));
-    const prof = [[0.16, 0.02], [0.2, 0.26], [0.04, 0.45], [-0.16, 0.41], [-0.25, 0.29], [-0.15, 0.04]];
-    armor(N.head, 'helmet-top', 'HELMET TOP PLATE', prof.map(([x, y]) => [x, y]), 0.15, {p: [0, 0, 0], r: [0, 90, 0]}, {tags: T, trim: 'block', cy: 0.25, out: [0, 1, 0.2], dist: 0.7, bolts: false});
+    hexA(N.head, 'helmet-top', 'HELMET TOP PLATE', 0.24, 0.4, 0.04, [0, 0.4, 0.03], [-60, 0, 0], {tags: T, trim: 'stripe', cy: 0.25, out: [0, 1, 0.3], dist: 0.7}, {c: 0.3, tp: 0.35, bt: 1});
+    hexA(N.head, 'helmet-face', 'HELMET FACE PLATE', 0.22, 0.26, 0.04, [0, 0.22, 0.17], [-12, 0, 0], {tags: T, trim: 'edge', cy: 0.25, out: [0, 0, 1], dist: 0.8}, {c: 0.3, tp: 1, bt: 0.45});
+    hexA(N.head, 'helmet-back', 'HELMET BACK PLATE', 0.22, 0.28, 0.04, [0, 0.24, -0.17], [10, 180, 0], {tags: T, col: G, trim: 'block', cy: 0.25, out: [0, 0.2, -1], dist: 0.7}, {tp: 0.8, bt: 0.8});
     for (const [s, sx] of L2) {
       const cheek = [[0.05, 0.1], [-0.13, 0.13], [-0.2, 0.28], [0.0, 0.31], [0.11, 0.21]].map(([x, y]) => [x * (sx > 0 ? 1 : -1), y]);
       armor(N.head, 'helmet-side-' + s, s + ' HELMET CHEEK', cheek, 0.03, {p: [sx * 0.115, 0, 0], r: [0, sx * 90, 0]}, {tags: T, col: G, trim: 'edge', cy: 0.25, dist: 0.5, bolts: false});
       const fin = [[0, 0], [0.34, 0.12], [0.06, 0.15]].map(([x, y]) => [x * (sx > 0 ? 1 : -1), y]);
-      armor(N.head, 'fin-' + s, s + ' HELMET FIN', fin, 0.012, {p: [sx * 0.085, 0.38, -0.11], r: [0, sx * 90, 0]}, {tags: T, col: COL.white, line: false, bolts: false, cy: 0.25, dist: 0.5});
+      armor(N.head, 'fin-' + s, s + ' HELMET FIN', fin, 0.012, {p: [sx * 0.09, 0.36, -0.1], r: [0, sx * 90, sx * 25]}, {tags: T, col: COL.white, line: false, bolts: false, cy: 0.25, dist: 0.5});
     }
-    const vp = mkPart(N.head, 'visor', 'V VISOR', 'armor', {tags: T, pos: [0, 0.285, 0.232], out: [0, 0.2, 1], dist: 0.6, stage: 1});
+    const vp = mkPart(N.head, 'visor', 'V VISOR', 'armor', {tags: T, pos: [0, 0.27, 0.215], out: [0, 0.2, 1], dist: 0.95, stage: 1});
     addMesh(vp, ext(poly([[-0.14, 0.06], [0, -0.07], [0.14, 0.06], [0.14, 0.12], [0, 0.0], [-0.14, 0.12]]), 0.02, 0.003), 'glow', {args: ['#ff9a2e', 0.85]});
     hexA(N.head, 'chin', 'CHIN GUARD', 0.14, 0.1, 0.03, [0, 0.07, 0.15], [-40, 0, 0], {tags: T, col: G, trim: 'edge', cy: 0.25}, {tp: 0.9, bt: 0.6});
   }
@@ -189,21 +190,25 @@ export function addBody(C) {
     actuator('act-knee-' + s, s + ' KNEE ACTUATOR', th, kn, [-sx * 0.12, -LEG.thigh + LEG.kA, 0], [-sx * 0.12, -LEG.kB, 0], [...T, 'knee'], kn);
     actuator('act-hock-' + s, s + ' HOCK ACTUATOR', kn, hk, [-sx * 0.12, -LEG.shin + LEG.hA, 0], [-sx * 0.12, -LEG.hB, 0], [...T, 'foot'], hk);
     actuator('act-arm-' + s, s + ' ARM PISTON', N['sh' + s], N['el' + s], [sx * 0.1, -ARM.upper + ARM.a, 0.0], [sx * 0.1, -ARM.b, 0], ['arm' + s, s === 'R' ? 'blade' : 'shield'], N['el' + s]);
-    // armor
-    hexA(th, 'thigh-front-' + s, s + ' THIGH PLATE', 0.3, 0.62, 0.05, [0, -0.4, 0.15], [0, 0, 0], {tags: T, trim: 'stripe'}, {c: 0.25, tp: 0.7, bt: 0.5});
-    hexA(th, 'thigh-outer-' + s, s + ' THIGH OUTER', 0.28, 0.6, 0.05, [sx * 0.14, -0.4, 0], [0, sx * 90, 0], {tags: T, trim: 'edge'}, {tp: 0.8, bt: 0.7});
-    hexA(th, 'thigh-inner-' + s, s + ' THIGH INNER', 0.22, 0.5, 0.04, [-sx * 0.12, -0.4, 0], [0, -sx * 90, 0], {tags: T, trim: 'block'}, {tp: 0.8, bt: 0.7});
-    hexA(th, 'thigh-rear-' + s, s + ' THIGH REAR', 0.2, 0.5, 0.04, [0, -0.4, -0.12], [0, 180, 0], {tags: T, col: G, trim: 'stripe'}, {tp: 0.8, bt: 0.8});
-    hexA(th, 'thigh-cap-' + s, s + ' THIGH CAP', 0.22, 0.16, 0.045, [0, -0.1, 0.14], [-15, 0, 0], {tags: [...T, 'hip'], trim: 'edge'}, {c: 0.35, tp: 0.9, bt: 0.8});
+    // armor (sized for the unit-length legs, stretched to the real segment lengths)
+    const kt = LEG.thigh / 0.8;
+    const ks = LEG.shin / 0.78;
+    const km = LEG.meta / 0.62;
+    const hx = (par, k, id, name, w, h, d, p, r, o, shape) => hexA(par, id, name, w, h * k, d, [p[0], p[1] * k, p[2]], r, o, shape);
+    hx(th, kt, 'thigh-front-' + s, s + ' THIGH PLATE', 0.3, 0.62, 0.05, [0, -0.4, 0.15], [0, 0, 0], {tags: T, trim: 'stripe'}, {c: 0.25, tp: 0.7, bt: 0.5});
+    hx(th, kt, 'thigh-outer-' + s, s + ' THIGH OUTER', 0.28, 0.6, 0.05, [sx * 0.14, -0.4, 0], [0, sx * 90, 0], {tags: T, trim: 'edge'}, {tp: 0.8, bt: 0.7});
+    hx(th, kt, 'thigh-inner-' + s, s + ' THIGH INNER', 0.22, 0.5, 0.04, [-sx * 0.12, -0.4, 0], [0, -sx * 90, 0], {tags: T, trim: 'block'}, {tp: 0.8, bt: 0.7});
+    hx(th, kt, 'thigh-rear-' + s, s + ' THIGH REAR', 0.2, 0.5, 0.04, [0, -0.4, -0.12], [0, 180, 0], {tags: T, col: G, trim: 'stripe'}, {tp: 0.8, bt: 0.8});
+    hx(th, kt, 'thigh-cap-' + s, s + ' THIGH CAP', 0.22, 0.16, 0.045, [0, -0.1, 0.14], [-15, 0, 0], {tags: [...T, 'hip'], trim: 'edge'}, {c: 0.35, tp: 0.9, bt: 0.8});
     hexA(th, 'knee-guard-' + s, s + ' KNEE GUARD', 0.22, 0.24, 0.05, [0, -LEG.thigh - 0.02, 0.14], [10, 0, 0], {tags: [...T, 'knee'], trim: 'block'}, {c: 0.3, tp: 0.6, bt: 1});
-    hexA(kn, 'shin-front-' + s, s + ' SHIN PLATE', 0.2, 0.4, 0.045, [0, -0.26, 0.11], [0, 0, 0], {tags: T, trim: 'stripe'}, {tp: 0.7, bt: 0.6});
-    hexA(kn, 'shin-outer-' + s, s + ' SHIN OUTER', 0.22, 0.6, 0.045, [sx * 0.1, -0.4, 0], [0, sx * 90, 0], {tags: T, trim: 'edge'}, {tp: 0.8, bt: 0.5});
-    hexA(kn, 'shin-inner-' + s, s + ' SHIN INNER', 0.16, 0.46, 0.04, [-sx * 0.1, -0.38, 0], [0, -sx * 90, 0], {tags: T, trim: 'block'}, {tp: 0.8, bt: 0.6});
-    hexA(kn, 'calf-' + s, s + ' CALF PLATE', 0.2, 0.34, 0.045, [0, -0.3, -0.11], [0, 180, 0], {tags: T, col: G, trim: 'stripe'}, {tp: 0.8, bt: 0.8});
+    hx(kn, ks, 'shin-front-' + s, s + ' SHIN PLATE', 0.2, 0.4, 0.045, [0, -0.26, 0.11], [0, 0, 0], {tags: T, trim: 'stripe'}, {tp: 0.7, bt: 0.6});
+    hx(kn, ks, 'shin-outer-' + s, s + ' SHIN OUTER', 0.22, 0.6, 0.045, [sx * 0.1, -0.4, 0], [0, sx * 90, 0], {tags: T, trim: 'edge'}, {tp: 0.8, bt: 0.5});
+    hx(kn, ks, 'shin-inner-' + s, s + ' SHIN INNER', 0.16, 0.46, 0.04, [-sx * 0.1, -0.38, 0], [0, -sx * 90, 0], {tags: T, trim: 'block'}, {tp: 0.8, bt: 0.6});
+    hx(kn, ks, 'calf-' + s, s + ' CALF PLATE', 0.2, 0.34, 0.045, [0, -0.3, -0.11], [0, 180, 0], {tags: T, col: G, trim: 'stripe'}, {tp: 0.8, bt: 0.8});
     hexA(kn, 'hock-guard-' + s, s + ' HOCK GUARD', 0.18, 0.2, 0.045, [0, -LEG.shin + 0.02, -0.1], [0, 180, 0], {tags: [...T, 'foot'], trim: 'block'}, {c: 0.3, tp: 1, bt: 0.8});
-    hexA(hk, 'meta-front-' + s, s + ' METATARSAL PLATE', 0.13, 0.45, 0.04, [0, -0.3, 0.075], [0, 0, 0], {tags: [...T, 'foot'], trim: 'stripe'}, {tp: 0.8, bt: 0.5});
-    hexA(hk, 'meta-side-' + s, s + ' METATARSAL SIDE', 0.12, 0.38, 0.035, [sx * 0.06, -0.28, 0], [0, sx * 90, 0], {tags: [...T, 'foot'], trim: 'edge'}, {tp: 0.8, bt: 0.6});
-    hexA(hk, 'spur-plate-' + s, s + ' SPUR PLATE', 0.1, 0.24, 0.035, [0, -0.2, -0.065], [0, 180, 0], {tags: [...T, 'foot'], col: G}, {tp: 0.8, bt: 0.5});
+    hx(hk, km, 'meta-front-' + s, s + ' METATARSAL PLATE', 0.13, 0.45, 0.04, [0, -0.3, 0.075], [0, 0, 0], {tags: [...T, 'foot'], trim: 'stripe'}, {tp: 0.8, bt: 0.5});
+    hx(hk, km, 'meta-side-' + s, s + ' METATARSAL SIDE', 0.12, 0.38, 0.035, [sx * 0.06, -0.28, 0], [0, sx * 90, 0], {tags: [...T, 'foot'], trim: 'edge'}, {tp: 0.8, bt: 0.6});
+    hx(hk, km, 'spur-plate-' + s, s + ' SPUR PLATE', 0.1, 0.24, 0.035, [0, -0.2, -0.065], [0, 180, 0], {tags: [...T, 'foot'], col: G}, {tp: 0.8, bt: 0.5});
     hexA(ft, 'foot-top-' + s, s + ' FOOT COVER', 0.26, 0.22, 0.035, [0, -0.02, 0.14], [-90, 0, 0], {tags: [...T, 'foot'], trim: 'edge', cy: 0}, {c: 0.3, tp: 0.6, bt: 1});
     hexA(ft, 'heel-' + s, s + ' HEEL PLATE', 0.12, 0.12, 0.03, [0, -0.04, -0.07], [-90, 0, 0], {tags: [...T, 'foot'], col: G, cy: 0}, {tp: 0.8, bt: 1});
     // three claw toes and a rear spur, with ground-contact markers on the tips

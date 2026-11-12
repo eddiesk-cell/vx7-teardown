@@ -35,7 +35,7 @@ export const BASE_KW = 40;
 export const ACT = {bore: 0.05, rod: 0.028, stroke: 0.18};
 export const actLen = (a, b, gamma) => Math.sqrt(a * a + b * b - 2 * a * b * Math.cos(gamma));
 // leg: lengths, neutral bends (deg). Forward-positive angles throughout.
-export const LEG = {thigh: 0.8, shin: 0.78, meta: 0.62, kneeBend: 47, hockBend: 40, thighLean: 22, metaWorld: 14, abd: 9, kA: 0.26, kB: 0.26, hA: 0.22, hB: 0.22};
+export const LEG = {thigh: 0.88, shin: 0.88, meta: 0.7, kneeBend: 64, hockBend: 54, thighLean: 30, metaWorld: 14, abd: 13, kA: 0.26, kB: 0.26, hA: 0.22, hB: 0.22};
 export const ARM = {upper: 0.62, fore: 0.62, a: 0.2, b: 0.2};
 
 // ---- sequences

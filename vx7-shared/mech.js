@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {ACT, ARM, D2R, DRIVES, GEAR, LEG, actLen, driveKin, pose} from './kin.js';
+import {ACT, ARM, BODY, D2R, DRIVES, GEAR, LEG, actLen, driveKin, pose} from './kin.js';
 import {addBody} from './body.js';
 
 const V3 = THREE.Vector3;
@@ -150,26 +150,28 @@ function core() {
   // ------------------------------------------------------------ armor: bevelled shell, panel line, trim, bolts
   function armor(parent, id, name, shapePts, d, place, o = {}) {
     const {tags = [], trim = null, col = COL.white, bolts = true, dist, out, cy = parent.userData.cy ?? place.p[1], line = true} = o;
-    const [rx, ry, rz] = (place.r || [0, 0, 0]).map((a) => a * D2R);
-    const n = new V3(0, 0, 1).applyEuler(new THREE.Euler(rx, ry, rz));
+    const [rx, ry, rz] = (place.r || [0, 0, 0]).slice(0, 3).map((a) => a * D2R);
+    const order = (place.r && place.r[3]) || 'XYZ';
+    const n = new V3(0, 0, 1).applyEuler(new THREE.Euler(rx, ry, rz, order));
     const rad = new V3(place.p[0], (place.p[1] - cy) * 0.3, place.p[2]);
     const ov = out ? new V3(...out).normalize() : rad.lengthSq() > 0.004 ? rad.normalize().multiplyScalar(0.7).add(n.clone().multiplyScalar(0.6)).normalize() : n;
     const p = mkPart(parent, id, name, 'armor', {tags, pos: place.p, out: ov.toArray(), dist: dist ?? 0.55 + 0.4 * hash(id), stage: 1});
-    p.group.rotation.set(rx, ry, rz);
+    p.group.rotation.set(rx, ry, rz, order);
     const shell = ext(poly(shapePts), d);
     const front = d / 2 + 0.012;
     const m = new Merge().add(shell, {c: col});
-    if (line) {
-      const s = poly(scalePts(shapePts, 0.8));
-      s.holes.push(new THREE.Path(scalePts(shapePts, 0.76).reverse().map(([x, y]) => new THREE.Vector2(x, y))));
-      m.add(new THREE.ExtrudeGeometry(s, {depth: 0.003, bevelEnabled: false}), {p: [0, 0, front], c: COL.ink});
-    }
-    let xs = shapePts.map((q) => q[0]);
-    let ys = shapePts.map((q) => q[1]);
+    const xs = shapePts.map((q) => q[0]);
+    const ys = shapePts.map((q) => q[1]);
     const w = Math.max(...xs) - Math.min(...xs);
     const h = Math.max(...ys) - Math.min(...ys);
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
     const cyy = (Math.max(...ys) + Math.min(...ys)) / 2;
+    const about = (k) => shapePts.map(([x, y]) => [cx + (x - cx) * k, cyy + (y - cyy) * k]);
+    if (line) {
+      const s = poly(about(0.8));
+      s.holes.push(new THREE.Path(about(0.76).reverse().map(([x, y]) => new THREE.Vector2(x, y))));
+      m.add(new THREE.ExtrudeGeometry(s, {depth: 0.003, bevelEnabled: false}), {p: [0, 0, front], c: COL.ink});
+    }
     if (trim === 'stripe') m.add(box(w * 0.09, h * 0.58, 0.005, 0.002), {p: [cx + w * 0.2, cyy, front + 0.002], c: COL.orange});
     if (trim === 'edge') m.add(box(w * 0.5, 0.022, 0.005, 0.002), {p: [cx, cyy - h * 0.36, front + 0.002], c: COL.orange});
     if (trim === 'block') m.add(box(w * 0.22, h * 0.16, 0.005, 0.002), {p: [cx - w * 0.18, cyy + h * 0.25, front + 0.002], c: COL.orange});
@@ -237,24 +239,24 @@ function core() {
   // ------------------------------------------------------------ the joint nodes
   const N = {};
   N.pelvis = node(root, 0, 1.95, 0, 0);
-  N.waist = node(N.pelvis, 0, 0.3, 0);
+  N.waist = node(N.pelvis, 0, BODY.waistY, 0);
   N.chest = node(N.waist, 0, 0, 0, 0.55);
-  N.neck = node(N.chest, 0, 0.95, 0.02);
+  N.neck = node(N.chest, 0, BODY.neckY, 0.02);
   N.head = node(N.neck, 0, 0, 0, 0.28);
   for (const [s, sx] of [['L', 1], ['R', -1]]) {
-    N['hipAbd' + s] = node(N.pelvis, sx * 0.4, -0.12, 0);
+    N['hipAbd' + s] = node(N.pelvis, sx * BODY.hipX, -0.12, 0);
     N['hip' + s] = node(N['hipAbd' + s]);
     N['thigh' + s] = N['hip' + s];
     N['knee' + s] = node(N['thigh' + s], 0, -LEG.thigh, 0);
     N['hock' + s] = node(N['knee' + s], 0, -LEG.shin, 0);
     N['foot' + s] = node(N['hock' + s], 0, -LEG.meta, 0);
-    N['shAbd' + s] = node(N.chest, sx * 0.55, 0.82, 0);
+    N['shAbd' + s] = node(N.chest, sx * BODY.shX, BODY.shY, 0);
     N['sh' + s] = node(N['shAbd' + s]);
     N['el' + s] = node(N['sh' + s], 0, -ARM.upper, 0);
     N['wrist' + s] = node(N['el' + s], 0, -ARM.fore, 0);
     for (const k of ['thigh', 'knee', 'hock', 'sh', 'el']) N[k + s].userData.cy = -0.38;
   }
-  N.shield = node(N.chest, 0.98, 0.35, -0.3);
+  N.shield = node(N.chest, 0.9, 0.46, -0.3);
   Object.assign(N.shield.userData, {cy: 0.35});
   const SX = {L: 1, R: -1};
 
@@ -386,10 +388,10 @@ function core() {
   };
   const DRV = Object.fromEntries(DRIVES.map((d) => [d.id, d]));
   // joint sign: how the joint angle turns the node about +x (+1 up-pointing joints and the knee, -1 hanging limbs)
-  buildDrive(DRV.neck, N.chest, [0, 0.95, 0.02], 1, 1, ['head', 'neck'], 1);
-  buildDrive(DRV.waist, N.pelvis, [0, 0.3, 0], -1, 1, ['waist', 'spine'], 1);
+  buildDrive(DRV.neck, N.chest, [0, BODY.neckY, 0.02], 1, 1, ['head', 'neck'], 1);
+  buildDrive(DRV.waist, N.pelvis, [0, BODY.waistY, 0], -1, 1, ['waist', 'spine'], 1);
   for (const [s, sx] of [['L', 1], ['R', -1]]) {
-    buildDrive(DRV['sh' + s], N.chest, [sx * 0.55, 0.82, 0], sx, -1, ['shoulder', 'shoulder' + s, s === 'R' ? 'blade' : 'shield'], 1);
+    buildDrive(DRV['sh' + s], N.chest, [sx * BODY.shX, BODY.shY, 0], sx, -1, ['shoulder', 'shoulder' + s, s === 'R' ? 'blade' : 'shield'], 1);
     buildDrive(DRV['el' + s], N['sh' + s], [0, -ARM.upper, 0], sx, -1, ['arm' + s, s === 'R' ? 'blade' : 'shield'], 1);
     buildDrive(DRV['hip' + s], N['hipAbd' + s], [0, 0, 0], sx, -1, ['hip', 'leg' + s], 1);
     buildDrive(DRV['knee' + s], N['thigh' + s], [0, -LEG.thigh, 0], sx, 1, ['knee', 'leg' + s], 1);
@@ -411,7 +413,7 @@ export function buildMech() {
     N.pelvis.rotation.x = P.lean * D2R;
     N.waist.rotation.x = P.waist * D2R;
     N.neck.rotation.x = P.neck * D2R;
-    N.shield.rotation.set(0, (50 + P.shield) * D2R, 10 * D2R);
+    N.shield.rotation.set(0, (50 + P.shield) * D2R, 16 * D2R);
     for (const [s, sx] of [['L', 1], ['R', -1]]) {
       N['hipAbd' + s].rotation.z = sx * LEG.abd * D2R;
       N['hip' + s].rotation.x = -(LEG.thighLean + P['hip' + s]) * D2R;

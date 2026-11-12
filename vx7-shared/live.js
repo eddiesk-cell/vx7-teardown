@@ -15,7 +15,7 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const sm = (x) => (x = clamp(x)) * x * (3 - 2 * x);
 const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
 const VIEWS3 = {
-  hero: {tx: 0, ty: 1.9, tz: 0, az: 22, el: 6, d: 11.6},
+  hero: {tx: 0, ty: 1.85, tz: 0, az: 18, el: 3, d: 10.2},
   front: {tx: 0, ty: 1.9, tz: 0, az: 0, el: 4, d: 11.6},
   side: {tx: 0, ty: 1.9, tz: 0, az: 90, el: 4, d: 11.6},
   back: {tx: 0, ty: 1.9, tz: 0, az: 180, el: 4, d: 11.6},
@@ -32,7 +32,7 @@ const ISO = {
 };
 const LABELS = [
   ['reactor-core', 'REACTOR CORE', 'ORANGE TORUS · COOLANT LOOPS'], ['drive-neck', 'NECK DRIVE', '49:1 · 2 STAGES'], ['drive-shL', 'L SHOULDER DRIVE', 'SUN 12 · PLANET 30 · RING 72'],
-  ['drive-elR', 'R ELBOW DRIVE', 'FRAMELESS BLDC + PLANETARY'], ['blade', 'PLASMA BLADE', '1.3 M · ORANGE'], ['visor', 'V VISOR', ''], ['shield-core', 'SHIELD', 'ROTARY DRUM MOUNT'],
+  ['drive-elR', 'R ELBOW DRIVE', 'FRAMELESS BLDC + PLANETARY'], ['blade', 'PLASMA BLADE', '1.3 M · ORANGE'], ['visor', 'V VISOR', ''], ['shield-spine', 'SHIELD', 'ROTARY DRUM MOUNT'],
   ['drive-waist', 'WAIST DRIVE', 'SPINE RINGS ABOVE'], ['drive-hipL', 'L HIP DRIVE', '49:1'], ['drive-hipR', 'R HIP DRIVE', '49:1'], ['act-knee-R', 'KNEE ACTUATOR', 'BORE 50 · ROD 28 · STROKE 180 MM'],
   ['act-hock-L', 'HOCK ACTUATOR', 'BORE 50 · ROD 28 · STROKE 180 MM'], ['drive-kneeL', 'L KNEE DRUM', '49:1'],
 ];
@@ -450,6 +450,21 @@ export function runLive() {
     setView(n) {
       A.view(n);
       S.snap = true;
+    },
+    cam(tx, ty, tz, az, el, d) {
+      VIEWS3.custom = {tx, ty, tz, az, el, d};
+      S.view = 'custom';
+      off.az = off.el = 0;
+      off.k = 1;
+      S.snap = true;
+    },
+    height() {
+      const b = new THREE.Box3();
+      for (const p of mech.parts) if (p.kind !== 'armor' || p.id !== 'blade') b.expandByObject(p.group);
+      return {min: b.min.toArray(), max: b.max.toArray(), pelvis: mech.N.pelvis.position.y};
+    },
+    showUI(on) {
+      ui.root.style.display = on ? '' : 'none';
     },
     takeOver,
     startTour,

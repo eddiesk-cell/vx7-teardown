@@ -43,6 +43,30 @@ try {
     };
   });
   await shot('01-hero', () => RESET());
+  // side-by-side with the reference: the render without the console, cropped to the reference's square
+  if (!only.length || only.includes('cm')) {
+    await run(() => {
+      LIVE.takeOver();
+      RESET();
+      LIVE.showUI(false);
+    });
+    await page.waitForTimeout(1200);
+    const png = await page.screenshot({clip: {x: 350, y: 0, width: 900, height: 900}});
+    await run(() => LIVE.showUI(true));
+    const ref = fs.readFileSync(path.join(ROOT, 'ref/vx7-reference.png')).toString('base64');
+    const cmp = await browser.newPage({viewport: {width: 1800, height: 900}});
+    const out = await cmp.evaluate(async ([a, b]) => {
+      const load = (s) => new Promise((r) => Object.assign(new Image(), {src: 'data:image/png;base64,' + s, onload() { r(this); }}));
+      const c = Object.assign(document.createElement('canvas'), {width: 1800, height: 900});
+      const g = c.getContext('2d');
+      g.drawImage(await load(a), 0, 0, 900, 900);
+      g.drawImage(await load(b), 900, 0);
+      return c.toDataURL('image/png').split(',')[1];
+    }, [ref, png.toString('base64')]);
+    fs.writeFileSync(path.join(OUT, 'compare.png'), Buffer.from(out, 'base64'));
+    await cmp.close();
+    console.log('wrote compare');
+  }
   await shot('02-xray', () => LIVE.setDisplay?.('xray', true));
   await shot('03-explode-armor', () => {
     RESET();

@@ -35,7 +35,8 @@ export const BASE_KW = 40;
 export const ACT = {bore: 0.05, rod: 0.028, stroke: 0.18};
 export const actLen = (a, b, gamma) => Math.sqrt(a * a + b * b - 2 * a * b * Math.cos(gamma));
 // leg: lengths, neutral bends (deg). Forward-positive angles throughout.
-export const LEG = {thigh: 0.88, shin: 0.88, meta: 0.7, kneeBend: 64, hockBend: 54, thighLean: 30, metaWorld: 14, abd: 13, kA: 0.26, kB: 0.26, hA: 0.22, hB: 0.22};
+export const BODY = {hipX: 0.36, waistY: 0.34, shX: 0.47, shY: 0.85, neckY: 0.97};
+export const LEG = {thigh: 0.8, shin: 0.82, meta: 0.52, kneeBend: 78, hockBend: 56, thighLean: 36, metaWorld: 14, abd: 16, kA: 0.26, kB: 0.26, hA: 0.22, hB: 0.22};
 export const ARM = {upper: 0.62, fore: 0.62, a: 0.2, b: 0.2};
 
 // ---- sequences
@@ -74,7 +75,7 @@ export function pose(seq, tau) {
     });
   }
   // hock (ankle) hydraulics keep the foot flat: metatarsal world angle = LEG.metaWorld
-  for (const s of 'LR') p['hock' + s] = p.lean - 1 - p['hip' + s] + p['knee' + s];
+  for (const s of 'LR') p['hock' + s] = LEG.metaWorld + p.lean - (LEG.thighLean + p['hip' + s] - LEG.kneeBend - p['knee' + s]) - LEG.hockBend;
   return p;
 }
 // actuator lengths and strokes from a pose

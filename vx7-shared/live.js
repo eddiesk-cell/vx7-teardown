@@ -135,6 +135,7 @@ export function runLive({film = null} = {}) {
   const refresh = () => {
     const mix = S.mix && {P: S.mix.P, u: (S.T - S.mix.t0) / BLEND};
     S.P = mech.setPose(S.seq, S.tau, mix);
+    if (S.iso) mech.trail.visible = false; // a close-up on a part: the blade's trail would sweep across the lens
     S.floorNow = S.floor0 + S.P.travel;
     st.setTravel(S.floorNow);
     mech.applyExplode(S.k, extra);

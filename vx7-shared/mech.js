@@ -689,5 +689,5 @@ export function buildMech() {
     return worst;
   };
   const worldPos = (id, out = new V3()) => byId[id].group.getWorldPosition(out);
-  return {...C, ready, setPose, applyExplode, tick, style, gearCount, homeError, worldPos, bounds, resetFx, fx: fxg};
+  return {...C, ready, setPose, applyExplode, tick, style, gearCount, homeError, worldPos, bounds, resetFx, fx: fxg, trail};
 }

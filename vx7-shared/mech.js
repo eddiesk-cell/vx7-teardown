@@ -256,8 +256,8 @@ function core() {
     N['wrist' + s] = node(N['el' + s], 0, -ARM.fore, 0);
     for (const k of ['thigh', 'knee', 'hock', 'sh', 'el']) N[k + s].userData.cy = -0.38;
   }
-  N.shield = node(N.chest, 0.74, 0.42, -0.3);
-  N.shield.scale.set(0.72, 0.93, 1);
+  N.shield = node(N.chest, 0.72, 0.38, -0.3);
+  N.shield.scale.set(0.82, 1.0, 1);
   N.head.scale.setScalar(1);
   Object.assign(N.shield.userData, {cy: 0.35});
   const SX = {L: 1, R: -1};
@@ -415,7 +415,7 @@ export function buildMech() {
     N.pelvis.rotation.x = P.lean * D2R;
     N.waist.rotation.x = P.waist * D2R;
     N.neck.rotation.x = P.neck * D2R;
-    N.shield.rotation.set(0, (50 + P.shield) * D2R, 16 * D2R);
+    N.shield.rotation.set(0, (42 + P.shield) * D2R, 16 * D2R);
     for (const [s, sx] of [['L', 1], ['R', -1]]) {
       N['hipAbd' + s].rotation.z = sx * LEG['abd' + s] * D2R;
       N['hip' + s].rotation.x = -(LEG.thighLean + P['hip' + s]) * D2R;

@@ -15,7 +15,7 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const sm = (x) => (x = clamp(x)) * x * (3 - 2 * x);
 const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
 const VIEWS3 = {
-  hero: {tx: 0, ty: 1.9, tz: 0, az: 18, el: 3, d: 8.7},
+  hero: {tx: 0, ty: 1.95, tz: 0, az: 18, el: 3, d: 10.6},
   front: {tx: 0, ty: 1.9, tz: 0, az: 0, el: 4, d: 11.6},
   side: {tx: 0, ty: 1.9, tz: 0, az: 90, el: 4, d: 11.6},
   back: {tx: 0, ty: 1.9, tz: 0, az: 180, el: 4, d: 11.6},

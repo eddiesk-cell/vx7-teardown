@@ -278,7 +278,7 @@ export function addBody(C) {
     const T = ['armR', 'blade'];
     const f = frame(N.wristR, 'fist', 'HILT FIST', T, {out: [-0.3, -1, 0.3], dist: 0.4});
     solid(f, new Merge().add(box(0.13, 0.14, 0.09, 0.02), {p: [0, -0.07, 0.01], c: G}).add(cyl(0.05, 0.05, 0.05, 10), {r: [0, 0, Math.PI / 2], c: COL.steel}));
-    const BR = 135 * D2R;
+    const BR = 108 * D2R;
     const em = mkPart(N.wristR, 'blade-emitter', 'BLADE EMITTER HOUSING', 'frame', {tags: T, pos: [0, -0.15, 0.04], out: [-0.3, -0.8, 0.5], dist: 0.55, stage: 2});
     em.group.rotation.set(BR, 0, -0.38);
     solid(em, new Merge().add(cyl(0.062, 0.062, 0.2, 14), {p: [0, 0.1, 0], c: G}).add(cyl(0.07, 0.07, 0.025, 14), {p: [0, 0.2, 0], c: COL.orange}).add(cyl(0.07, 0.07, 0.025, 14), {p: [0, 0.03, 0], c: COL.steel}).add(box(0.1, 0.05, 0.14, 0.01), {p: [0, 0.13, 0], c: COL.dark}));

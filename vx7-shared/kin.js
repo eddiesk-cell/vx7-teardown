@@ -36,7 +36,7 @@ export const ACT = {bore: 0.05, rod: 0.028, stroke: 0.18};
 export const actLen = (a, b, gamma) => Math.sqrt(a * a + b * b - 2 * a * b * Math.cos(gamma));
 // leg: lengths, neutral bends (deg). Forward-positive angles throughout.
 export const BODY = {hipX: 0.26, waistY: 0.26, shX: 0.4, shY: 0.62, neckY: 0.7};
-export const LEG = {thigh: 1.02, shin: 1.0, meta: 0.66, kneeBend: 78, hockBend: 56, thighLean: 36, metaWorld: 14, abdL: -1, abdR: 28, kA: 0.26, kB: 0.26, hA: 0.22, hB: 0.22};
+export const LEG = {thigh: 1.02, shin: 1.0, meta: 0.66, kneeBend: 78, hockBend: 56, thighLean: 36, metaWorld: 14, abdL: 1, abdR: 28, kA: 0.26, kB: 0.26, hA: 0.22, hB: 0.22};
 export const ARM = {abdL: 20, abdR: 30, upper: 0.75, fore: 0.75, a: 0.2, b: 0.2};
 
 // ---- sequences
@@ -47,7 +47,7 @@ const kf = (t, k) => {
   return k[k.length - 1][1];
 };
 // the resting stance every sequence starts from (deg, forward-positive)
-export const STANCE0 = {neck: 0, waist: 0, shL: 4, shR: 2, elL: 20, elR: 10, hipL: -9, hipR: 2, kneeL: 2, kneeR: 12, shield: 0, lean: 9};
+export const STANCE0 = {neck: 0, waist: 0, shL: 4, shR: 2, elL: 20, elR: 10, hipL: -9, hipR: 2, kneeL: 5, kneeR: 27, shield: 0, lean: 7};
 export function pose(seq, tau) {
   const T = SEQ[seq].dur;
   const t = ((tau % T) + T) % T;

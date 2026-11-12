@@ -11,9 +11,12 @@ import {buildMech} from './mech.js';
 const V3 = THREE.Vector3;
 export const BG = '#d9dadd';
 
-const GROUND_FRAG = /* glsl */ `uniform vec3 uG; uniform vec3 uBg; uniform vec3 uC; varying vec3 vW;
-  void main(){ float d = length(vW.xz - uC.xz); float n = fract(sin(dot(floor(vW.xz * 60.0), vec2(12.9898, 78.233))) * 43758.5453);
-    vec3 col = uG * (0.99 + 0.02 * n); gl_FragColor = vec4(mix(col, uBg, smoothstep(4.0, 15.0, d)), 1.0); }`;
+// the floor rolls back under the mech by uOff metres (a treadmill: the mech stays put, its travel moves the 1 m grid)
+const GROUND_FRAG = /* glsl */ `uniform vec3 uG; uniform vec3 uBg; uniform vec3 uC; uniform float uOff; varying vec3 vW;
+  void main(){ float d = length(vW.xz - uC.xz); vec2 f = vW.xz + vec2(0.0, uOff);
+    float n = fract(sin(dot(floor(f * 60.0), vec2(12.9898, 78.233))) * 43758.5453);
+    vec2 q = abs(fract(f) - 0.5); float line = smoothstep(0.475, 0.497, max(q.x, q.y));
+    vec3 col = uG * (0.99 + 0.02 * n) * (1.0 - 0.075 * line); gl_FragColor = vec4(mix(col, uBg, smoothstep(4.0, 15.0, d)), 1.0); }`;
 
 export function createStage({canvas}) {
   const renderer = new THREE.WebGLRenderer({canvas, antialias: false, preserveDrawingBuffer: true, powerPreference: 'high-performance'});
@@ -45,6 +48,7 @@ export function createStage({canvas}) {
   const floorVis = (v) => () => {
     ground.visible = v && floorOn;
     shade.visible = v && floorOn;
+    mech.fx.visible = v;
   };
   composer.addPass(new Toggle(floorVis(false)));
   composer.addPass(gtao);
@@ -91,7 +95,7 @@ export function createStage({canvas}) {
   const groundMat = new THREE.ShaderMaterial({
     vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
     fragmentShader: GROUND_FRAG,
-    uniforms: {uG: {value: new THREE.Color('#dedfe2')}, uBg: {value: new THREE.Color(BG)}, uC: {value: new V3()}},
+    uniforms: {uG: {value: new THREE.Color('#dedfe2')}, uBg: {value: new THREE.Color(BG)}, uC: {value: new V3()}, uOff: {value: 0}},
     toneMapped: false,
   });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), groundMat);
@@ -123,7 +127,7 @@ export function createStage({canvas}) {
     camera.setViewOffset(size.w, size.h, -(cam.sx ?? 0), -(cam.sy ?? 0), size.w, size.h);
     camera.updateMatrixWorld();
     groundMat.uniforms.uC.value.set(tx, 0, tz);
-    sun.target.position.set(0, 1.6, 0);
+    sun.target.position.set(0, 1.6 + (cam.lift ?? 0), 0);
     sun.position.copy(sun.target.position).addScaledVector(SUN, 10);
     sun.target.updateMatrixWorld();
     composer.render();
@@ -151,5 +155,6 @@ export function createStage({canvas}) {
     shade.visible = v;
     floorOn = v;
   };
-  return {renderer, scene, camera, composer, gtao, bloom, sun, mech, resize, frame, project, size, setQuality, setFloor};
+  const setTravel = (m) => (groundMat.uniforms.uOff.value = m % 1000);
+  return {renderer, scene, camera, composer, gtao, bloom, sun, mech, resize, frame, project, size, setQuality, setFloor, setTravel};
 }

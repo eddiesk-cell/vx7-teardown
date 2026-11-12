@@ -1,11 +1,14 @@
-# VX-7 Duelist · teardown
+# VX-7 Duelist
 
-A take-apart 3D simulator of a white fighting mech: one offline HTML page. Spin it, pull the armor off panel by panel,
-slide every joint's motor and planetary gearbox out and watch the gears turn.
+A product page for a white fighting mech that you can drive like a game character and take apart: one offline HTML
+page. He walks when you arrive; turn, zoom and pan around him while he moves; make him run, jump, roll, slash, block
+and shoot; then pull the armor off panel by panel and watch the motors and planetary gears work inside.
 
-![VX-7 hero](review/01-hero.png)
+![VX-7 product page](review/page.png)
 
-![Exploded](review/04-explode-full.png)
+![Fighting](review/fight.png)
+
+![Armor off, still running](review/inside.png)
 
 ## How it is made
 
@@ -26,9 +29,31 @@ slide every joint's motor and planetary gearbox out and watch the gears turn.
 
 ## Controls
 
-EXPLODE slider in three stages (ARMOR, DRIVES, GEARS), X-RAY ARMOR, ISOLATE (head, reactor, shoulder, blade arm, hip, knee,
-foot), LABELS, four views, orbit, click any panel to pull it out and again to put it back, REASSEMBLE ALL, sequences STANCE /
-STRIDE / STRIKE, and an auto tour that hands control to you on any input.
+- **MOVE:** IDLE `I` · WALK `W` · RUN `R` · JUMP `Space` · ROLL `Q`. **FIGHT:** SLASH `J` · BLOCK `K` · SHOOT `L` (laser
+  from the left forearm) · COMBO `F`. Jump, roll and the fight moves play once, then he goes back to the walk, run or idle
+  you left him in.
+- **Look:** drag to turn, scroll or pinch to zoom, right-drag, shift-drag or two fingers to pan, views `1`-`4`. The camera
+  turns slowly on its own until you touch it (TURNTABLE).
+- **Look inside:** X-RAY ARMOR `X`, the EXPLODE slider in three stages (ARMOR, DRIVES, GEARS), EXPLODE ALL `E`, ISOLATE
+  (head, reactor, shoulder, blade arm, hip, knee, foot), LABELS, click any part to pull it out and again to put it back,
+  REASSEMBLE ALL `C`. Live telemetry follows the drive doing the most work in each move.
+- The floor is a treadmill: he stays in the middle and the grid rolls back under him at his real speed (1.7 m/s walking,
+  6.5 m/s running, 2.8 m per jump, one full turn per roll).
+
+## The film
+
+`vx7-film` is the same page played from a script (`vx7-shared/film.js`) on a fixed clock: walk, run, jump, roll, slash,
+block, shoot, a fight in x-ray, running with the armor off, every part out, the right shoulder's gears, back together.
+The score (`vx7-shared/score.py`) is synthesised from the same timeline, so every footfall, swing, laser shot and hit lands
+on its frame.
+
+```
+node tools/timeline.mjs                                   # vx7-film/timeline.json from the script and the moves
+python ../teardown/run_sfx.py vx7-shared/score.py         # teardown-out/vx7-score.wav
+node ../teardown/sims/build.mjs ./vx7-film
+node ../teardown/sims/capture.mjs vx7-film --size 1600x900 --dpr 1.2 --out teardown-out/vx7-silent.mp4
+ffmpeg -i teardown-out/vx7-silent.mp4 -i teardown-out/vx7-score.wav -map 0:v -map 1:a -c:v copy -c:a aac -shortest teardown-out/vx7-film.mp4
+```
 
 ## Build
 
@@ -42,15 +67,16 @@ node ../teardown/sims/build.mjs ./vx7-live        # -> teardown-out/dist/vx7-liv
 
 `docs/index.html` is a copy of that build.
 
-Review stills (needs Playwright's Chromium, or point `CHROMIUM` at any Chrome):
+Checks (need Playwright's Chromium, or point `CHROMIUM` at any Chrome):
 
 ```
-CHROMIUM=/path/to/chrome node tools/shoot.mjs      # review/01..12 .png, exits 1 on any console error
-CHROMIUM=/path/to/chrome node tools/tour-check.mjs # runs the auto tour once and prints fps
+CHROMIUM=/path/to/chrome node tools/product-check.mjs  # clicks the buttons and keys, pans, zooms, pulls a part; exit 1 on a fail
+CHROMIUM=/path/to/chrome node tools/moves.mjs          # review/moves-*.png: every move at its key moments
+CHROMIUM=/path/to/chrome node tools/shoot.mjs          # review/01..12 .png: x-ray, explode, isolates, labels
 ```
 
 Test hooks live on `window.LIVE`: `setExplode(k)`, `setDisplay(key, on)`, `isolate(name|null)`, `pull(partId)`, `reassemble()`,
-`setSeq(name, tau)`, `setView(name)`, `takeOver()`, `parts`, `gearCount()`, `homeError()`.
+`setSeq(name, tau)`, `press(buttonKey)`, `setView(name)`, `pan(x, y, zoom)`, `parts`, `gearCount()`, `homeError()`.
 
 ## Credits and license
 

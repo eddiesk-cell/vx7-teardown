@@ -168,4 +168,21 @@ export function addInner(C) {
     addMesh(bp, ext(sh(0.045, 1.25, 0.3), 0.03, 0.006).translate(0, 0.2, 0), 'glow', {args: [COL.orange, 0.85], shadow: false});
     addMesh(bp, ext(sh(0.026, 1.15, 0.28), 0.04, 0.004).translate(0, 0.22, 0), 'glow', {args: ['#ffd68a', 0.95], shadow: false});
   }
+  // ---------------------------------------------------------------- left forearm: the laser emitter, its barrel along the
+  // outside of the forearm and the muzzle just past the wrist (C.muzzle is where the bolts leave)
+  {
+    const T = ['armL', 'shield', 'laser'];
+    const L = LEN.foreL;
+    const x = 0.13;
+    const p = mkPart(N.elL, 'laser', 'LASER EMITTER', 'frame', {tags: T, pos: [x, 0, 0.02], out: [1, 0, 0.3], dist: 0.6, stage: 2});
+    const m = new Merge().add(cyl(0.034, 0.034, L * 0.72, 14), {p: [0, -L * 0.56, 0], c: G}).add(cyl(0.046, 0.046, 0.1, 14), {p: [0, -L * 0.24, 0], c: COL.steel});
+    m.add(cyl(0.026, 0.034, 0.12, 14), {p: [0, -L * 0.96, 0], c: COL.chrome});
+    for (const y of [0.42, 0.56, 0.7]) m.add(new THREE.TorusGeometry(0.037, 0.008, 6, 16), {p: [0, -L * y, 0], r: [Math.PI / 2, 0, 0], c: COL.orange});
+    m.add(box(0.03, 0.16, 0.05, 0.008), {p: [-0.04, -L * 0.3, 0], c: G});
+    solid(p, m);
+    addMesh(p, new THREE.TorusGeometry(0.024, 0.007, 8, 16).rotateX(Math.PI / 2).translate(0, -L * 1.02, 0), 'glow', {args: [COL.orange, 0.8], shadow: false});
+    C.muzzle = new THREE.Object3D();
+    C.muzzle.position.set(x, -L * 1.05, 0.02);
+    N.elL.add(C.muzzle);
+  }
 }

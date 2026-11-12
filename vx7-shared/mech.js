@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {ACT, ARM, D2R, DRIVES, GEAR, LEG, REST, actLen, driveKin, pose} from './kin.js';
+import {ACT, ARM, D2R, DRIVES, GEAR, LEG, REST, SHOTS, actLen, driveKin, pose} from './kin.js';
 import {addInner} from './inner.js';
 import {loadShell} from './shell.js';
 
@@ -422,35 +422,174 @@ function core() {
 export function buildMech() {
   const C = core();
   addInner(C);
-  const ready = loadShell(C);
-  const {root, parts, byId, movers, N, acts, feet, drives, pickables} = C;
+  const {root, parts, byId, movers, N, acts, feet, drives, pickables, SX} = C;
   const Y = new V3(0, 1, 0);
+  const X = new V3(1, 0, 0);
+  const Z = new V3(0, 0, 1);
   const tmpA = new V3();
-  const setPose = (seq, tau) => {
-    const P = pose(seq, tau);
-    const X = new V3(1, 0, 0);
-    const turn = (n, ax, deg) => n.quaternion.copy(n.userData.q0).multiply(new THREE.Quaternion().setFromAxisAngle(ax, deg * D2R));
-    turn(N.pelvis, X, P.lean);
-    turn(N.waist, X, P.waist);
+  const qa = new THREE.Quaternion();
+  const qb = new THREE.Quaternion();
+  N.shield.userData.z0 = N.shield.position.z;
+  // what touches the floor: the claw markers, then (once the shell is in) extreme points of every armor panel and the
+  // shield, held in their joint node's frame so an exploded panel never lifts the body
+  const hull = feet.map((m) => ({node: m.parent, v: m.position.clone()}));
+  const DIRS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1], ...[-1, 1].flatMap((a) => [-1, 1].flatMap((b) => [-1, 1].map((c) => [a, b, c])))].map((d) => new V3(...d).normalize());
+  const buildHull = () => {
+    const M = new THREE.Matrix4();
+    for (const p of parts) {
+      if (p.kind !== 'armor' || p.id === 'blade') continue;
+      M.compose(p.home, p.group.quaternion, p.group.scale);
+      for (const o of p.group.children) {
+        if (!o.isMesh) continue;
+        const pa = o.geometry.attributes.position;
+        for (const d of DIRS) {
+          let best = -1e9;
+          let bi = 0;
+          for (let i = 0; i < pa.count; i++) {
+            const k = pa.getX(i) * d.x + pa.getY(i) * d.y + pa.getZ(i) * d.z;
+            if (k > best) [best, bi] = [k, i];
+          }
+          hull.push({node: p.parent, v: new V3().fromBufferAttribute(pa, bi).applyMatrix4(o.matrix).applyMatrix4(M)});
+        }
+      }
+    }
+    flyCache.clear();
+  };
+  const ready = loadShell(C).then((added) => {
+    buildHull();
+    return added;
+  });
+  const lowest = () => {
+    let low = 1e9;
+    for (const h of hull) low = Math.min(low, tmpA.copy(h.v).applyMatrix4(h.node.matrixWorld).y);
+    return low;
+  };
+  const turn = (n, ax, deg) => n.quaternion.copy(n.userData.q0 || qb.identity()).multiply(qa.setFromAxisAngle(ax, deg * D2R));
+  // pose every joint, stand the pelvis at rest height and return how high the pelvis must sit for the lowest point to touch
+  const joints = (P) => {
+    turn(N.pelvis, X, P.lean + P.pitch);
+    N.waist.quaternion.copy(N.waist.userData.q0).multiply(qa.setFromAxisAngle(Y, P.twist * D2R)).multiply(qb.setFromAxisAngle(X, P.waist * D2R));
     turn(N.neck, X, P.neck);
     turn(N.shield, Y, 40 + P.shield);
+    N.shield.position.z = N.shield.userData.z0 + P.shieldZ;
+    N.pelvis.position.set(REST.pelvis[0], REST.pelvis[1], REST.pelvis[2] + P.dz);
+    const body = new THREE.Quaternion().setFromAxisAngle(X, P.pitch * D2R);
     for (const s of ['L', 'R']) {
+      turn(N['hipAbd' + s], Z, SX[s] * P['ha' + s]);
+      turn(N['shAbd' + s], Z, SX[s] * P['ab' + s]);
       turn(N['hip' + s], X, -P['hip' + s]);
       turn(N['knee' + s], X, P['knee' + s]);
       turn(N['hock' + s], X, -P['hock' + s]);
       turn(N['sh' + s], X, -P['sh' + s]);
       turn(N['el' + s], X, -P['el' + s]);
-      // the foot keeps its rest attitude in the world: undo everything above it
+      // the foot keeps its rest attitude to the ground (turning with the body only in a roll)
       N['hock' + s].updateWorldMatrix(true, false);
-      N['foot' + s].quaternion.copy(N['hock' + s].getWorldQuaternion(new THREE.Quaternion()).invert());
+      N['foot' + s].quaternion.copy(N['hock' + s].getWorldQuaternion(qa).invert()).multiply(body);
     }
-    for (const k in N) N[k].updateMatrix();
-    // the lowest claw tip rests on the floor
-    N.pelvis.position.y = REST.pelvis[1];
+    byId.blade?.group.scale.set(1, Math.max(0.001, P.blade), 1);
     root.updateMatrixWorld(true);
-    let low = 1e9;
-    for (const m of feet) low = Math.min(low, m.getWorldPosition(tmpA).y);
-    N.pelvis.position.y = REST.pelvis[1] - low;
+    return REST.pelvis[1] - lowest();
+  };
+  // the pelvis height at take-off and touch-down of a flight, so the body flies a clean arc between them
+  const flyCache = new Map();
+  const groundAt = (seq, t) => {
+    const k = seq + t;
+    if (!flyCache.has(k)) flyCache.set(k, joints(pose(seq, t)));
+    return flyCache.get(k);
+  };
+  // ---- what the moves fire: laser bolts and the muzzle flash, the spark of a blow on the shield, the blade's trail
+  const glowMat = (c, i) => new THREE.MeshBasicMaterial({color: new THREE.Color(c).multiplyScalar(i), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false});
+  const fxg = new THREE.Group(); // kept out of the AO pass (stage.js), so a glow never casts occlusion
+  root.add(fxg);
+  const bolts = SHOTS.map(() => {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 1.3, 4, 10), glowMat('#ff6a14', 1.8)), new THREE.Mesh(new THREE.CapsuleGeometry(0.026, 1.3, 4, 8), glowMat('#fff0c8', 3)));
+    fxg.add(g);
+    return g;
+  });
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), glowMat('#ffab4a', 2.5));
+  const spark = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), glowMat('#ffc066', 2.6));
+  const sparkRing = new THREE.Mesh(new THREE.RingGeometry(0.82, 1, 40), glowMat('#ff8a2a', 2));
+  const TRAIL = 9;
+  const trailGeo = new THREE.BufferGeometry();
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL * 6), 3));
+  trailGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(TRAIL * 6), 3));
+  trailGeo.setIndex(Array.from({length: TRAIL - 1}, (_, i) => [2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2]).flat());
+  const trail = new THREE.Mesh(trailGeo, new THREE.MeshBasicMaterial({vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false}));
+  trail.frustumCulled = false;
+  fxg.add(flash, spark, sparkRing, trail);
+  for (const o of [flash, spark, sparkRing, ...bolts]) o.renderOrder = 2;
+  const hist = [];
+  const fv = new V3();
+  const fd = new V3();
+  const ORANGE = new THREE.Color('#ff8a2a');
+  const fx = (P) => {
+    // bolts fly along the upper arm's aim (the forearm kicks with recoil) at 36 m/s for 0.45 s; the flash is the newest shot
+    C.muzzle.getWorldPosition(fv);
+    fd.set(0, -1, 0).applyQuaternion(N.shL.getWorldQuaternion(qa));
+    const shots = P.shots || [];
+    bolts.forEach((b, i) => {
+      const a = shots[i] ?? -1;
+      b.visible = a >= 0 && a < 0.45;
+      if (b.visible) b.position.copy(fv).addScaledVector(fd, 0.75 + 36 * a), b.quaternion.setFromUnitVectors(Y, fd);
+    });
+    const age = Math.min(9, ...shots.filter((a) => a >= 0));
+    const f = Math.exp(-age / 0.045);
+    flash.visible = f > 0.03;
+    flash.position.copy(fv);
+    flash.scale.setScalar(0.05 + 0.16 * f);
+    // a blow on the shield: a hot core and a ring running out across its face
+    const sp = P.spark || 0;
+    spark.visible = sparkRing.visible = sp > 0.03;
+    if (spark.visible) {
+      N.shield.getWorldPosition(fv);
+      fd.set(0, 0, 1).applyQuaternion(N.shield.getWorldQuaternion(qa));
+      spark.position.copy(fv).addScaledVector(fd, 0.12);
+      spark.scale.setScalar(0.32 * sp);
+      sparkRing.position.copy(spark.position);
+      sparkRing.quaternion.setFromUnitVectors(Z, fd);
+      sparkRing.scale.setScalar(0.15 + 0.85 * (1 - sp));
+      sparkRing.material.opacity = sp;
+    }
+    // the blade's trail: its edge over the last frames, bright only while it moves fast
+    const bl = byId.blade;
+    if (!bl) return;
+    bl.group.updateWorldMatrix(true, false);
+    hist.unshift([new V3(0, 0.3, 0).applyMatrix4(bl.group.matrixWorld), new V3(0, 1.45, 0).applyMatrix4(bl.group.matrixWorld)]);
+    if (hist.length > TRAIL) hist.length = TRAIL;
+    let len = 0;
+    for (let i = 1; i < hist.length; i++) len += hist[i][1].distanceTo(hist[i - 1][1]);
+    const gain = P.blade > 0.5 ? (P.trail || 0) * Math.min(1, Math.max(0, (len - 0.5) / 1.5)) : 0;
+    trail.visible = gain > 0;
+    const pos = trailGeo.attributes.position.array;
+    const col = trailGeo.attributes.color.array;
+    for (let i = 0; i < TRAIL; i++) {
+      const h = hist[Math.min(i, hist.length - 1)];
+      h[0].toArray(pos, i * 6);
+      h[1].toArray(pos, i * 6 + 3);
+      const k = gain * (1 - i / TRAIL) ** 2.5 * 1.4;
+      for (const o of [0, 3]) ORANGE.toArray(col, i * 6 + o), (col[i * 6 + o] *= k), (col[i * 6 + o + 1] *= k), (col[i * 6 + o + 2] *= k);
+    }
+    trailGeo.attributes.position.needsUpdate = trailGeo.attributes.color.needsUpdate = true;
+  };
+  const resetFx = () => (hist.length = 0);
+  // mix: {P, u} blends from a frozen pose (the moment a sequence was switched) into this one
+  const setPose = (seq, tau, mix) => {
+    const P = pose(seq, tau);
+    if (mix && mix.u < 1) {
+      const u = sm(mix.u);
+      for (const k in P) if (typeof P[k] === 'number' && k !== 'travel' && k in mix.P) P[k] = mix.P[k] + (P[k] - mix.P[k]) * u;
+      delete P.fly;
+    }
+    let y;
+    if (P.fly) {
+      const [a, b, u] = P.fly;
+      const ya = groundAt(seq, a);
+      const yb = groundAt(seq, b);
+      joints(P);
+      y = ya + (yb - ya) * u + P.air;
+    } else y = joints(P) + P.air;
+    N.pelvis.position.y = y;
     root.updateMatrixWorld(true);
     // hydraulic cylinders aim at their rod mounts; the rod length is the real distance between mounts
     for (const a of acts) {
@@ -464,6 +603,7 @@ export function buildMech() {
       a.eye.position.y = L;
     }
     C.spinDrives(P);
+    fx(P);
     return P;
   };
   // effect of explode k (0 armor, 0.35 drives and frame, 0.7 gears) and of pulled / isolated parts
@@ -549,5 +689,5 @@ export function buildMech() {
     return worst;
   };
   const worldPos = (id, out = new V3()) => byId[id].group.getWorldPosition(out);
-  return {...C, ready, setPose, applyExplode, tick, style, gearCount, homeError, worldPos, bounds};
+  return {...C, ready, setPose, applyExplode, tick, style, gearCount, homeError, worldPos, bounds, resetFx, fx: fxg};
 }

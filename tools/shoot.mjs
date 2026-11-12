@@ -192,7 +192,7 @@ try {
   });
   await shot('10-strike', () => {
     RESET();
-    LIVE.setSeq('STRIKE', 0.9);
+    LIVE.setSeq('FIGHT', 0.78);
     LIVE.setView('side');
   });
   const checks = await run(() => {

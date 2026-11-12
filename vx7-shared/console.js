@@ -66,7 +66,7 @@ export function createConsole(app, total) {
   add(`<div style="position:absolute;left:181px;top:30px;font-size:30px;font-weight:700;letter-spacing:-.6px;line-height:1">VX-7 DUELIST · TEARDOWN <span style="color:${C.or};font-weight:400">/</span></div>`);
   add(`<div class="mo" style="position:absolute;left:182px;top:68px;font-size:10.5px;letter-spacing:2.2px;color:#666b73">10 PLANETARY DRIVES · 49:1 · HYDRAULIC KNEES AND HOCKS · PLASMA BLADE</div>`);
   add(`<div class="mo" style="position:absolute;left:1352px;top:34px;color:${C.or};font-size:12px;letter-spacing:-1px">//////</div>`);
-  add(`<div class="sm" style="left:1418px;top:30px;line-height:14px;letter-spacing:2.2px">PROCEDURAL MODEL<br>BUILT FROM CODE<br>NO ASSETS</div>`);
+  add(`<div class="sm" style="left:1418px;top:30px;line-height:14px;letter-spacing:2.2px">PAINTED 3D SHELL<br>INSIDES BUILT FROM CODE<br>ALL MADE LOCALLY</div>`);
 
   // 01 selected drive
   panel(24, 92, 262, 318, 'SELECTED DRIVE', '01');

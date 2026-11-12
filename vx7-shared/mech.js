@@ -4,8 +4,9 @@
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {ACT, ARM, BODY, D2R, DRIVES, GEAR, LEG, actLen, driveKin, pose} from './kin.js';
-import {addBody} from './body.js';
+import {ACT, ARM, D2R, DRIVES, GEAR, LEG, REST, actLen, driveKin, pose} from './kin.js';
+import {addInner} from './inner.js';
+import {loadShell} from './shell.js';
 
 const V3 = THREE.Vector3;
 export const COL = {white: '#ececE8', graphite: '#2a2c30', orange: '#f08a24', steel: '#9aa0a6', copper: '#b87333', chrome: '#d8dce0', ink: '#16181b', dark: '#3a3d42'};
@@ -237,28 +238,41 @@ function core() {
   };
 
   // ------------------------------------------------------------ the joint nodes
+  // every node sits on its measured joint (kin.js REST); limb nodes turn so their local -Y runs down the limb to the
+  // next joint, which is what the bones, drives and actuators are built along. q0 is that rest turn; poses are deltas.
   const N = {};
-  N.pelvis = node(root, 0, 1.95, 0, 0);
-  N.waist = node(N.pelvis, 0, BODY.waistY, 0);
-  N.chest = node(N.waist, 0, 0, 0, 0.55);
-  N.neck = node(N.chest, 0, BODY.neckY, 0.02);
-  N.head = node(N.neck, 0, 0, 0, 0.28);
-  for (const [s, sx] of [['L', 1], ['R', -1]]) {
-    N['hipAbd' + s] = node(N.pelvis, sx * BODY.hipX, -0.12, 0);
-    N['hip' + s] = node(N['hipAbd' + s]);
-    N['thigh' + s] = N['hip' + s];
-    N['knee' + s] = node(N['thigh' + s], 0, -LEG.thigh, 0);
-    N['hock' + s] = node(N['knee' + s], 0, -LEG.shin, 0);
-    N['foot' + s] = node(N['hock' + s], 0, -LEG.meta, 0);
-    N['shAbd' + s] = node(N.chest, sx * BODY.shX, BODY.shY, 0);
-    N['sh' + s] = node(N['shAbd' + s]);
-    N['el' + s] = node(N['sh' + s], 0, -ARM.upper, 0);
-    N['wrist' + s] = node(N['el' + s], 0, -ARM.fore, 0);
+  const W = (k) => new V3(...REST[k]);
+  const DOWN = new V3(0, -1, 0);
+  const at = (parent, k, aim) => {
+    const g = node(parent);
+    parent.updateMatrixWorld(true);
+    const wq = aim ? new THREE.Quaternion().setFromUnitVectors(DOWN, W(aim).sub(W(k)).normalize()) : new THREE.Quaternion();
+    g.position.copy(parent.worldToLocal(W(k)));
+    g.quaternion.copy(parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(wq));
+    g.userData.q0 = g.quaternion.clone();
+    g.updateMatrixWorld(true);
+    return g;
+  };
+  N.pelvis = at(root, 'pelvis');
+  N.waist = at(N.pelvis, 'waist');
+  N.chest = N.waist;
+  N.neck = at(N.chest, 'neck');
+  N.head = N.neck;
+  for (const s of ['L', 'R']) {
+    N['hipAbd' + s] = at(N.pelvis, 'hip' + s);
+    N['hip' + s] = N['thigh' + s] = at(N['hipAbd' + s], 'hip' + s, 'knee' + s);
+    N['knee' + s] = at(N['thigh' + s], 'knee' + s, 'hock' + s);
+    N['hock' + s] = at(N['knee' + s], 'hock' + s, 'foot' + s);
+    N['foot' + s] = at(N['hock' + s], 'foot' + s);
+    N['shAbd' + s] = at(N.chest, 'sh' + s);
+    N['sh' + s] = at(N['shAbd' + s], 'sh' + s, 'el' + s);
+    N['el' + s] = at(N['sh' + s], 'el' + s, 'wr' + s);
+    N['wrist' + s] = at(N['el' + s], 'wr' + s, 'hand' + s);
     for (const k of ['thigh', 'knee', 'hock', 'sh', 'el']) N[k + s].userData.cy = -0.38;
   }
-  N.shield = node(N.chest, 0.72, 0.38, -0.3);
-  N.shield.scale.set(0.82, 1.0, 1);
-  N.head.scale.setScalar(1);
+  // the shield hangs off the left shoulder on a boom, outboard of the arm
+  N.shield = node(N.chest, 0.86, 2.62 - REST.waist[1], -0.14);
+  N.shield.userData.q0 = new THREE.Quaternion();
   Object.assign(N.shield.userData, {cy: 0.35});
   const SX = {L: 1, R: -1};
 
@@ -390,13 +404,14 @@ function core() {
   };
   const DRV = Object.fromEntries(DRIVES.map((d) => [d.id, d]));
   // joint sign: how the joint angle turns the node about +x (+1 up-pointing joints and the knee, -1 hanging limbs)
-  buildDrive(DRV.neck, N.chest, [0, BODY.neckY, 0.02], 1, 1, ['head', 'neck'], 1);
-  buildDrive(DRV.waist, N.pelvis, [0, BODY.waistY, 0], -1, 1, ['waist', 'spine'], 1);
+  const P0 = (n) => n.position.toArray();
+  buildDrive(DRV.neck, N.chest, P0(N.neck), 1, 1, ['head', 'neck'], 1);
+  buildDrive(DRV.waist, N.pelvis, P0(N.waist), -1, 1, ['waist', 'spine'], 1);
   for (const [s, sx] of [['L', 1], ['R', -1]]) {
-    buildDrive(DRV['sh' + s], N.chest, [sx * BODY.shX, BODY.shY, 0], sx, -1, ['shoulder', 'shoulder' + s, s === 'R' ? 'blade' : 'shield'], 1);
-    buildDrive(DRV['el' + s], N['sh' + s], [0, -ARM.upper, 0], sx, -1, ['arm' + s, s === 'R' ? 'blade' : 'shield'], 1);
+    buildDrive(DRV['sh' + s], N.chest, P0(N['shAbd' + s]), sx, -1, ['shoulder', 'shoulder' + s, s === 'R' ? 'blade' : 'shield'], 1);
+    buildDrive(DRV['el' + s], N['sh' + s], P0(N['el' + s]), sx, -1, ['arm' + s, s === 'R' ? 'blade' : 'shield'], 1);
     buildDrive(DRV['hip' + s], N['hipAbd' + s], [0, 0, 0], sx, -1, ['hip', 'leg' + s], 1);
-    buildDrive(DRV['knee' + s], N['thigh' + s], [0, -LEG.thigh, 0], sx, 1, ['knee', 'leg' + s], 1);
+    buildDrive(DRV['knee' + s], N['thigh' + s], P0(N['knee' + s]), sx, 1, ['knee', 'leg' + s], 1);
   }
   const _ = {ARM, LEG, ACT, actLen};
   void _;
@@ -406,33 +421,36 @@ function core() {
 // ------------------------------------------------------------ the finished mech
 export function buildMech() {
   const C = core();
-  addBody(C);
+  addInner(C);
+  const ready = loadShell(C);
   const {root, parts, byId, movers, N, acts, feet, drives, pickables} = C;
   const Y = new V3(0, 1, 0);
   const tmpA = new V3();
   const setPose = (seq, tau) => {
     const P = pose(seq, tau);
-    N.pelvis.rotation.x = P.lean * D2R;
-    N.waist.rotation.x = P.waist * D2R;
-    N.neck.rotation.x = P.neck * D2R;
-    N.shield.rotation.set(0, (42 + P.shield) * D2R, 16 * D2R);
-    for (const [s, sx] of [['L', 1], ['R', -1]]) {
-      N['hipAbd' + s].rotation.z = sx * LEG['abd' + s] * D2R;
-      N['hip' + s].rotation.x = -(LEG.thighLean + P['hip' + s]) * D2R;
-      N['knee' + s].rotation.x = (LEG.kneeBend + P['knee' + s]) * D2R;
-      N['hock' + s].rotation.x = -(LEG.hockBend + P['hock' + s]) * D2R;
-      N['foot' + s].rotation.x = -(N.pelvis.rotation.x + N['hip' + s].rotation.x + N['knee' + s].rotation.x + N['hock' + s].rotation.x);
-      N['shAbd' + s].rotation.z = sx * ARM['abd' + s] * D2R;
-      N['sh' + s].rotation.x = -P['sh' + s] * D2R;
-      N['el' + s].rotation.x = -P['el' + s] * D2R;
+    const X = new V3(1, 0, 0);
+    const turn = (n, ax, deg) => n.quaternion.copy(n.userData.q0).multiply(new THREE.Quaternion().setFromAxisAngle(ax, deg * D2R));
+    turn(N.pelvis, X, P.lean);
+    turn(N.waist, X, P.waist);
+    turn(N.neck, X, P.neck);
+    turn(N.shield, Y, 40 + P.shield);
+    for (const s of ['L', 'R']) {
+      turn(N['hip' + s], X, -P['hip' + s]);
+      turn(N['knee' + s], X, P['knee' + s]);
+      turn(N['hock' + s], X, -P['hock' + s]);
+      turn(N['sh' + s], X, -P['sh' + s]);
+      turn(N['el' + s], X, -P['el' + s]);
+      // the foot keeps its rest attitude in the world: undo everything above it
+      N['hock' + s].updateWorldMatrix(true, false);
+      N['foot' + s].quaternion.copy(N['hock' + s].getWorldQuaternion(new THREE.Quaternion()).invert());
     }
     for (const k in N) N[k].updateMatrix();
     // the lowest claw tip rests on the floor
-    N.pelvis.position.y = 0;
+    N.pelvis.position.y = REST.pelvis[1];
     root.updateMatrixWorld(true);
     let low = 1e9;
     for (const m of feet) low = Math.min(low, m.getWorldPosition(tmpA).y);
-    N.pelvis.position.y = -low;
+    N.pelvis.position.y = REST.pelvis[1] - low;
     root.updateMatrixWorld(true);
     // hydraulic cylinders aim at their rod mounts; the rod length is the real distance between mounts
     for (const a of acts) {
@@ -531,5 +549,5 @@ export function buildMech() {
     return worst;
   };
   const worldPos = (id, out = new V3()) => byId[id].group.getWorldPosition(out);
-  return {...C, setPose, applyExplode, tick, style, gearCount, homeError, worldPos, bounds};
+  return {...C, ready, setPose, applyExplode, tick, style, gearCount, homeError, worldPos, bounds};
 }

@@ -173,8 +173,8 @@ try {
   }, 2200);
   await shot('08-pulled-panel', () => {
     RESET();
-    LIVE.pull('pec-L');
-    LIVE.pull('thigh-front-R');
+    LIVE.pull('shell-torso-10');
+    LIVE.pull('shell-thighR-00');
   }, 1500);
   await shot('09-reassembled', () => {
     LIVE.setExplode(1);

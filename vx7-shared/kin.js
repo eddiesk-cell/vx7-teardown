@@ -18,26 +18,44 @@ export const driveKin = (th) => ({
 
 // id, name, drive scale (module size scales down on small joints), J kg m2 (reflected load inertia), M static gravity moment N m
 export const DRIVES = [
-  {id: 'neck', name: 'NECK', s: 0.45, J: 1.2, M: 35},
-  {id: 'waist', name: 'WAIST', s: 0.55, J: 18, M: 420},
-  {id: 'shL', name: 'L SHOULDER', s: 1, J: 9, M: 260},
-  {id: 'shR', name: 'R SHOULDER', s: 1, J: 11, M: 300},
-  {id: 'elL', name: 'L ELBOW', s: 0.7, J: 2.6, M: 70},
-  {id: 'elR', name: 'R ELBOW', s: 0.7, J: 3.4, M: 90},
-  {id: 'hipL', name: 'L HIP', s: 1, J: 26, M: 640},
-  {id: 'hipR', name: 'R HIP', s: 1, J: 26, M: 640},
-  {id: 'kneeL', name: 'L KNEE', s: 0.9, J: 12, M: 380},
-  {id: 'kneeR', name: 'R KNEE', s: 0.9, J: 12, M: 380},
+  {id: 'neck', name: 'NECK', s: 0.35, J: 1.2, M: 35},
+  {id: 'waist', name: 'WAIST', s: 0.5, J: 18, M: 420},
+  {id: 'shL', name: 'L SHOULDER', s: 0.72, J: 9, M: 260},
+  {id: 'shR', name: 'R SHOULDER', s: 0.72, J: 11, M: 300},
+  {id: 'elL', name: 'L ELBOW', s: 0.5, J: 2.6, M: 70},
+  {id: 'elR', name: 'R ELBOW', s: 0.5, J: 3.4, M: 90},
+  {id: 'hipL', name: 'L HIP', s: 0.7, J: 26, M: 640},
+  {id: 'hipR', name: 'R HIP', s: 0.7, J: 26, M: 640},
+  {id: 'kneeL', name: 'L KNEE', s: 0.62, J: 12, M: 380},
+  {id: 'kneeR', name: 'R KNEE', s: 0.62, J: 12, M: 380},
 ];
 export const BASE_KW = 40;
 
 // ---- hydraulic linear actuators: bore 50, rod 28, stroke 180 mm. Length by the law of cosines on the two mount points.
 export const ACT = {bore: 0.05, rod: 0.028, stroke: 0.18};
 export const actLen = (a, b, gamma) => Math.sqrt(a * a + b * b - 2 * a * b * Math.cos(gamma));
-// leg: lengths, neutral bends (deg). Forward-positive angles throughout.
-export const BODY = {hipX: 0.26, waistY: 0.26, shX: 0.4, shY: 0.62, neckY: 0.7};
-export const LEG = {thigh: 1.02, shin: 1.0, meta: 0.66, kneeBend: 78, hockBend: 56, thighLean: 36, metaWorld: 14, abdL: 1, abdR: 28, kA: 0.26, kB: 0.26, hA: 0.22, hB: 0.22};
-export const ARM = {abdL: 20, abdR: 30, upper: 0.75, fore: 0.75, a: 0.2, b: 0.2};
+// ---- the rest pose: joint centres (metres, mech frame: +y up, +z forward, +x its left), measured on the 3D shell
+// (front picture for x,y; mesh cross-sections for z — tools/shell/joints.py). Every pose angle below is a delta from it.
+export const REST = {
+  pelvis: [0, 2.344, 0], waist: [0, 2.578, -0.054], neck: [0, 3.21, -0.017],
+  hipL: [0.348, 2.318, 0.017], hipR: [-0.348, 2.311, -0.011], kneeL: [0.354, 1.512, 0.067], kneeR: [-0.405, 1.512, 0.068],
+  hockL: [0.432, 0.579, -0.129], hockR: [-0.499, 0.579, -0.131], footL: [0.455, 0.13, 0.023], footR: [-0.533, 0.13, 0.022],
+  shL: [0.523, 3.051, -0.1], shR: [-0.506, 3.037, -0.095], elL: [0.557, 2.528, -0.104], elR: [-0.658, 2.561, -0.116],
+  wrL: [0.692, 1.945, -0.058], wrR: [-0.86, 1.928, -0.079], handL: [0.675, 1.638, -0.021], handR: [-0.911, 1.762, -0.073],
+};
+const dist = (a, b) => Math.hypot(...REST[a].map((v, i) => v - REST[b][i]));
+export const LEN = {};
+for (const s of 'LR') Object.assign(LEN, {['thigh' + s]: dist('hip' + s, 'knee' + s), ['shin' + s]: dist('knee' + s, 'hock' + s), ['meta' + s]: dist('hock' + s, 'foot' + s), ['upper' + s]: dist('sh' + s, 'el' + s), ['fore' + s]: dist('el' + s, 'wr' + s)});
+export const BODY = {waistY: REST.waist[1] - REST.pelvis[1], neckY: REST.neck[1] - REST.waist[1]};
+// hydraulic mount offsets along the limb (m): knee and hock cylinders, elbow piston
+// rest bend at a joint: 180 minus the angle between its two limb segments (deg)
+const bend = (a, j, b) => {
+  const u = REST[a].map((v, i) => v - REST[j][i]);
+  const w = REST[b].map((v, i) => v - REST[j][i]);
+  return 180 - (Math.acos(u.reduce((t, v, i) => t + v * w[i], 0) / (Math.hypot(...u) * Math.hypot(...w))) * 180) / Math.PI;
+};
+export const LEG = {kA: 0.3, kB: 0.3, hA: 0.26, hB: 0.26, kneeBend: bend('hipL', 'kneeL', 'hockL'), hockBend: bend('kneeL', 'hockL', 'footL')};
+export const ARM = {a: 0.22, b: 0.22};
 
 // ---- sequences
 export const SEQ = {STANCE: {dur: 4}, STRIDE: {dur: 1.6}, STRIKE: {dur: 2.4}};
@@ -47,7 +65,7 @@ const kf = (t, k) => {
   return k[k.length - 1][1];
 };
 // the resting stance every sequence starts from (deg, forward-positive)
-export const STANCE0 = {neck: 0, waist: 0, shL: 4, shR: 2, elL: 20, elR: 10, hipL: -9, hipR: 2, kneeL: 5, kneeR: 27, shield: 0, lean: 7};
+export const STANCE0 = {neck: 0, waist: 0, shL: 0, shR: 0, elL: 0, elR: 0, hipL: 0, hipR: 0, kneeL: 0, kneeR: 0, shield: 0, lean: 0};
 export function pose(seq, tau) {
   const T = SEQ[seq].dur;
   const t = ((tau % T) + T) % T;
@@ -59,25 +77,25 @@ export function pose(seq, tau) {
   } else if (seq === 'STRIDE') {
     const ph = (x) => {
       const c = Math.cos(w + x);
-      return [26 * Math.sin(w + x), 6 + 42 * Math.pow(Math.max(0, c), 1.5)];
+      return [18 * Math.sin(w + x), 30 * Math.pow(Math.max(0, c), 1.5)];
     };
     const [hr, kr] = ph(0);
     const [hl, kl] = ph(Math.PI);
-    Object.assign(p, {hipR: hr, kneeR: kr, hipL: hl, kneeL: kl, shL: -22 * Math.sin(w) - 4, shR: 22 * Math.sin(w) + 6, elL: 22, elR: 34, waist: 4 * Math.sin(w), neck: -3 * Math.sin(w), shield: 6 * Math.sin(w)});
+    Object.assign(p, {hipR: hr, kneeR: kr, hipL: hl, kneeL: kl, shL: -16 * Math.sin(w), shR: 16 * Math.sin(w), elL: 12, elR: 12, waist: 4 * Math.sin(w), neck: -3 * Math.sin(w), shield: 6 * Math.sin(w)});
   } else {
     const K = (a) => kf(t, a);
     Object.assign(p, {
-      shR: K([[0, 8], [0.6, -50], [1.05, 105], [1.5, 95], [2.4, 8]]), elR: K([[0, 35], [0.6, 85], [1.05, 12], [1.5, 20], [2.4, 35]]),
-      waist: K([[0, 0], [0.6, -8], [1.05, 16], [1.5, 12], [2.4, 0]]), neck: K([[0, 0], [1.05, 8], [2.4, 0]]),
-      shL: K([[0, -6], [0.6, 20], [1.05, 40], [1.5, 38], [2.4, -6]]), elL: K([[0, 15], [0.6, 60], [1.05, 75], [1.5, 72], [2.4, 15]]),
+      shR: K([[0, 0], [0.6, -45], [1.05, 100], [1.5, 90], [2.4, 0]]), elR: K([[0, 0], [0.6, 70], [1.05, 5], [1.5, 12], [2.4, 0]]),
+      waist: K([[0, 0], [0.6, -8], [1.05, 14], [1.5, 10], [2.4, 0]]), neck: K([[0, 0], [1.05, 8], [2.4, 0]]),
+      shL: K([[0, 0], [0.6, 18], [1.05, 34], [1.5, 32], [2.4, 0]]), elL: K([[0, 0], [0.6, 40], [1.05, 55], [1.5, 52], [2.4, 0]]),
       shield: K([[0, 0], [0.6, 15], [1.05, 30], [1.6, 25], [2.4, 0]]),
-      hipR: K([[0, 14], [0.6, 8], [1.05, 34], [1.5, 30], [2.4, 14]]), kneeR: K([[0, 6], [0.6, 20], [1.05, 40], [1.5, 38], [2.4, 6]]),
-      hipL: K([[0, -6], [0.6, -14], [1.05, -24], [1.5, -20], [2.4, -6]]), kneeL: K([[0, 14], [0.6, 25], [1.05, 32], [1.5, 30], [2.4, 14]]),
-      lean: K([[0, 7], [0.6, 4], [1.05, 14], [1.5, 12], [2.4, 7]]),
+      hipR: K([[0, 0], [0.6, -6], [1.05, 18], [1.5, 16], [2.4, 0]]), kneeR: K([[0, 0], [0.6, 12], [1.05, 26], [1.5, 24], [2.4, 0]]),
+      hipL: K([[0, 0], [0.6, -8], [1.05, -14], [1.5, -12], [2.4, 0]]), kneeL: K([[0, 0], [0.6, 10], [1.05, 16], [1.5, 14], [2.4, 0]]),
+      lean: K([[0, 0], [0.6, -3], [1.05, 7], [1.5, 6], [2.4, 0]]),
     });
   }
-  // hock (ankle) hydraulics keep the foot flat: metatarsal world angle = LEG.metaWorld
-  for (const s of 'LR') p['hock' + s] = LEG.metaWorld + p.lean - (LEG.thighLean + p['hip' + s] - LEG.kneeBend - p['knee' + s]) - LEG.hockBend;
+  // the hock hydraulics hold the metatarsal at its rest angle: it cancels the lean, hip and knee above it
+  for (const s of 'LR') p['hock' + s] = p.lean - p['hip' + s] + p['knee' + s];
   return p;
 }
 // actuator lengths and strokes from a pose

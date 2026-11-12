@@ -15,10 +15,10 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const sm = (x) => (x = clamp(x)) * x * (3 - 2 * x);
 const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
 const VIEWS3 = {
-  hero: {tx: 0, ty: 1.95, tz: 0, az: 18, el: 3, d: 10.6},
-  front: {tx: 0, ty: 1.9, tz: 0, az: 0, el: 4, d: 11.6},
-  side: {tx: 0, ty: 1.9, tz: 0, az: 90, el: 4, d: 11.6},
-  back: {tx: 0, ty: 1.9, tz: 0, az: 180, el: 4, d: 11.6},
+  hero: {tx: 0, ty: 1.62, tz: 0, az: 18, el: 3, d: 10.6},
+  front: {tx: 0, ty: 1.6, tz: 0, az: 0, el: 4, d: 11.6},
+  side: {tx: 0, ty: 1.6, tz: 0, az: 90, el: 4, d: 11.6},
+  back: {tx: 0, ty: 1.6, tz: 0, az: 180, el: 4, d: 11.6},
 };
 // isolate specs: which parts stay solid, where the camera flies, how close
 const ISO = {
@@ -28,11 +28,11 @@ const ISO = {
   'BLADE ARM': {sel: (p) => p.tags.includes('blade'), focus: 'drive-elR', d: 4.6, armorSolid: true, drive: 'elR'},
   HIP: {sel: (p) => p.tags.includes('hip') && !p.tags.includes('legR'), focus: 'drive-hipL', d: 3.4, drive: 'hipL'},
   KNEE: {sel: (p) => p.tags.includes('knee') && p.tags.includes('legL'), focus: 'drive-kneeL', d: 3.0, drive: 'kneeL'},
-  FOOT: {sel: (p) => p.tags.includes('foot') && p.tags.includes('legL'), focus: 'toe-L2', d: 2.6, drive: 'kneeL'},
+  FOOT: {sel: (p) => p.tags.includes('foot') && p.tags.includes('legL'), focus: 'act-hock-L', d: 2.6, drive: 'kneeL'},
 };
 const LABELS = [
   ['reactor-core', 'REACTOR CORE', 'ORANGE TORUS · COOLANT LOOPS'], ['drive-neck', 'NECK DRIVE', '49:1 · 2 STAGES'], ['drive-shL', 'L SHOULDER DRIVE', 'SUN 12 · PLANET 30 · RING 72'],
-  ['drive-elR', 'R ELBOW DRIVE', 'FRAMELESS BLDC + PLANETARY'], ['blade', 'PLASMA BLADE', '1.3 M · ORANGE'], ['visor', 'V VISOR', ''], ['shield-spine', 'SHIELD', 'ROTARY DRUM MOUNT'],
+  ['drive-elR', 'R ELBOW DRIVE', 'FRAMELESS BLDC + PLANETARY'], ['blade', 'PLASMA BLADE', '1.3 M · ORANGE'], ['shell-head-00', 'HELMET', 'PAINTED SHELL · CLICK TO PULL'], ['shield-spine', 'SHIELD', 'ROTARY DRUM MOUNT'],
   ['drive-waist', 'WAIST DRIVE', 'SPINE RINGS ABOVE'], ['drive-hipL', 'L HIP DRIVE', '49:1'], ['drive-hipR', 'R HIP DRIVE', '49:1'], ['act-knee-R', 'KNEE ACTUATOR', 'BORE 50 · ROD 28 · STROKE 180 MM'],
   ['act-hock-L', 'HOCK ACTUATOR', 'BORE 50 · ROD 28 · STROKE 180 MM'], ['drive-kneeL', 'L KNEE DRUM', '49:1'],
 ];
@@ -420,14 +420,16 @@ export function runLive() {
   S.snap = true;
   // the chip's first state and the pointer's spots need the laid-out buttons
   spots = ui.spots();
-  warmComposer(st.renderer, st.composer, st.scene, st.camera).then(() => {
+  st.mech.ready.then(() => warmComposer(st.renderer, st.composer, st.scene, st.camera)).then(() => {
     last = performance.now();
     requestAnimationFrame(loop);
   });
 
   // ------------------------------------------------------------ test hooks
   window.LIVE = {
-    parts: mech.parts.map((p) => ({id: p.id, name: p.name, kind: p.kind})),
+    get parts() {
+      return mech.parts.map((p) => ({id: p.id, name: p.name, kind: p.kind}));
+    },
     gearCount: () => mech.gearCount(),
     homeError: () => mech.homeError(),
     setExplode(k) {

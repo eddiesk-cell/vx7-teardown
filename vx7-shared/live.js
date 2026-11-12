@@ -82,7 +82,7 @@ export function runLive() {
     const v = {...VIEWS3[S.view]};
     v.az += off.az + (disp.orbit ? 14 * (S.T - (S.orbit0 ?? 0)) : 0);
     v.el = clamp(v.el + off.el, -20, 80);
-    v.d *= off.k * (1 + 0.42 * sm(S.k));
+    v.d *= off.k * (1 + 0.3 * sm(S.k));
     if (S.iso) {
       const f = ISO[S.iso];
       const p = mech.worldPos(f.focus);

@@ -33,7 +33,7 @@ export function addBody(C) {
 
   // ---------------------------------------------------------------- chest
   {
-    const p = frame(N.chest, 'chest-frame', 'CHEST FRAME', ['reactor', 'torso'], {out: [0, 0.2, -1], dist: 0.6});
+    const p = frame(N.chest, 'chest-frame', 'CHEST FRAME', ['torso'], {out: [0, 0.2, -1], dist: 0.6});
     const sh = poly([[-0.12, 0.04], [0.12, 0.04], [0.3, 0.55], [0.36, 0.88], [-0.36, 0.88], [-0.3, 0.55]]);
     solid(p, new Merge().add(ext(sh, 0.3, 0.015), {c: G}).add(box(0.7, 0.04, 0.34, 0.008), {p: [0, 0.86, 0], c: COL.steel}).add(box(0.12, 0.5, 0.34, 0.01), {p: [0, 0.4, 0], c: COL.dark}), 'metal', {edges: ext(sh, 0.3, 0.015)});
     const b = frame(N.chest, 'back-frame', 'BACK FRAME', ['torso'], {out: [0, 0.2, -1], dist: 0.85});

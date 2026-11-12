@@ -76,6 +76,10 @@ try {
     RESET();
     LIVE.isolate('HEAD');
   }, 2200);
+  await shot('12-labels', () => {
+    RESET();
+    LIVE.setDisplay('labels', true);
+  });
   await shot('10-strike', () => {
     RESET();
     LIVE.setSeq('STRIKE', 1.2);

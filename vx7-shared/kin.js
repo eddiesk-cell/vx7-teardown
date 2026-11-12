@@ -49,7 +49,7 @@ export function pose(seq, tau) {
   const T = SEQ[seq].dur;
   const t = ((tau % T) + T) % T;
   const w = (2 * Math.PI * t) / T;
-  const p = {neck: 0, waist: 0, shL: -6, shR: 8, elL: 15, elR: 35, hipL: -6, hipR: 14, kneeL: 14, kneeR: 6, shield: 0, lean: 7};
+  const p = {neck: 0, waist: 0, shL: -4, shR: 4, elL: 18, elR: 26, hipL: -6, hipR: 14, kneeL: 14, kneeR: 6, shield: 0, lean: 7};
   if (seq === 'STANCE') {
     const s = Math.sin(w);
     Object.assign(p, {waist: 2 * s, neck: -2 * s, shL: p.shL + 2 * s, shR: p.shR - 2 * s, hipL: p.hipL + 1.5 * s, hipR: p.hipR - 1.5 * s, kneeL: p.kneeL + 2 * (1 - Math.cos(w)), kneeR: p.kneeR + 2 * (1 - Math.cos(w)), shield: 2 * s});

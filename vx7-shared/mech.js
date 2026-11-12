@@ -418,7 +418,7 @@ export function buildMech() {
       N['knee' + s].rotation.x = (LEG.kneeBend + P['knee' + s]) * D2R;
       N['hock' + s].rotation.x = -(LEG.hockBend + P['hock' + s]) * D2R;
       N['foot' + s].rotation.x = -(N.pelvis.rotation.x + N['hip' + s].rotation.x + N['knee' + s].rotation.x + N['hock' + s].rotation.x);
-      N['shAbd' + s].rotation.z = sx * (s === 'R' ? 30 : 14) * D2R;
+      N['shAbd' + s].rotation.z = sx * (s === 'R' ? 34 : 12) * D2R;
       N['sh' + s].rotation.x = -P['sh' + s] * D2R;
       N['el' + s].rotation.x = -P['el' + s] * D2R;
     }
@@ -452,7 +452,7 @@ export function buildMech() {
     for (const p of parts) {
       const e = Math.max(p.stage === 1 ? e1 : p.stage === 2 ? e2 : e3, p.pull, extra ? extra(p) : 0);
       p.e = e;
-      p.group.position.copy(p.home).addScaledVector(p.out, p.dist * e);
+      p.group.position.copy(p.home).addScaledVector(p.out, p.dist * e * (p.stage === 1 ? 2.1 : p.stage === 2 ? 1.9 : 1.8));
     }
     root.updateMatrixWorld(true);
   };

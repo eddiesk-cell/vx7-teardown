@@ -1,5 +1,5 @@
-# Cuts the painted shell into armor plates and writes them as one GLB (a mesh per plate).
-#   python3 tools/shell/split.py vx7-shared/assets/vx7-shell.glb vx7-shared/assets/vx7-armor.glb
+# Measures the painted shell into a mould for the code-built armor: per body segment, its radius and paint round the bone.
+#   python3 tools/shell/split.py vx7-shared/assets/vx7-shell.glb vx7-shared/assets/vx7-mold.json
 # 1. Each segment scores every vertex by its distance to the bone (in units of its radius). A segment cannot reach
 #    behind the joint it hangs from and its parent cannot reach past it, so neighbours meet on a plane at the joint.
 # 2. Each joint plane slides along its normal to the place where the cut crosses the least white armor: the dark
@@ -8,8 +8,8 @@
 #    thigh) go to the segment around them, so nothing of one part rides on another.
 # 4. Triangles on a boundary are clipped exactly on it, and normals are smoothed over the whole shell first, so the
 #    assembled shell shows no seam.
-# 5. Each of the 17 pieces is cut into plates on straight panel lines (bands and sectors round its bone, each nudged to
-#    a painted seam), with a panel groove between plates and a dark edge for their thickness.
+# 5. Each of the 17 pieces is measured round its bone (radius and paint colour on a 1 cm x 2.5 degree grid); the page
+#    builds the armor plates in code from that mould.
 import io, json, re, struct, sys, base64
 import numpy as np
 from PIL import Image
@@ -249,157 +249,50 @@ for t in np.nonzero(~whole)[0]:
 pieces = [np.concatenate([x.reshape(-1, 8) for x in pc]) for pc in pieces]
 print('clipped triangles:', int((~whole).sum()))
 
-# ---- 5. each piece comes apart into armor plates on straight panel lines, like the exploded reference
-# (ref/vx7-exploded.png): white plates with clean edges and real thickness lifting off the mechanical body. A piece is
-# cut by bands (planes across its bone) and sectors (half-planes along it, from the bone axis). Each line slides a
-# little, along the bone or round it, to where it crosses the least white armor in the paint, so it follows a painted
-# seam where there is one. Plates keep a GAP between them (the panel line) and get a dark edge wall of THICK.
-import math
-import cv2
-GAP = 0.006            # m: the groove between two plates
-THICK = 0.012          # m: plate thickness
-LAYOUT = {             # bands: fractions along the bone; sectors: boundary angles (deg) round it, 0 = the front
-    'pelvis': ([], [90, 270]), 'torso': ([0.5], [45, 135, 225, 315]), 'head': ([], [90, 270]),
-    'upper': ([0.5], [90, 270]), 'fore': ([0.5], [90, 270]), 'hand': ([], [90, 270]),
-    'thigh': ([0.36, 0.7], [90, 270]), 'shin': ([0.36, 0.7], [90, 270]), 'meta': ([0.5], [90, 270]), 'foot': ([], [90, 270])}
+# ---- 5. a mould for the code-built armor. The page builds every plate in code (vx7-shared/shell.js); this measures
+# the painted shell for it. Round each segment's bone, rays go out from the axis every DT along it and every DTH round
+# it, and the outermost hit on that segment's surface gives the radius r(t, theta) and the paint colour there.
+DT, NTH = 0.01, 144            # 1 cm along the bone, 2.5 degrees round it
+RGB = np.asarray(Image.open(io.BytesIO(JPEG)).convert('RGB'))
 def frame_of(g):
     u = g['u']; ref = np.array([0, 1.0, 0]) if abs(u[2]) > 0.6 else np.array([0, 0, 1.0])
     f = ref - (ref @ u) * u; f /= np.linalg.norm(f)
     return u, f, np.cross(u, f)
-def radial(g, X):
-    u, f, l = frame_of(g); d = X - g['a']; return d - np.outer(d @ u, u), d @ u
-def mdir(g, th):
-    u, f, l = frame_of(g); r = math.radians(th); return math.cos(r) * f + math.sin(r) * l
-def _dark_uv():
-    gb = cv2.blur(img.astype(np.float32), (9, 9)); v = cv2.blur(img.astype(np.float32) ** 2, (9, 9)) - gb * gb
-    y, x = np.unravel_index(np.argmin(np.where((gb > 0.08) & (gb < 0.2), v, 1e9)), gb.shape)
-    return np.array([(x + 0.5) / img.shape[1], (y + 0.5) / img.shape[0]])  # a flat dark graphite texel
-DUV = _dark_uv()
-def tune(g, pc, bands, secs):
-    """slide every band along the bone and every sector line round it to the darkest crossing nearby"""
-    T_ = pc[:, :3].reshape(-1, 3, 3); U_ = pc[:, 3:5].reshape(-1, 3, 2); C_ = T_.mean(1)
-    R_, t_ = radial(g, C_)
-    out_b, out_s = [], []
-    for fr in bands:
-        best = None
-        for dt in np.linspace(-0.12, 0.12, 13):
-            tot, br = crossing(T_, U_, g['a'] + (fr + dt) * g['len'] * g['u'], g['u'])
-            c = br + 0.15 * tot + 0.4 * abs(dt)
-            if best is None or c < best[0]: best = (c, fr + dt)
-        out_b.append(best[1] * g['len'])
-    for th in secs:
-        best = None
-        for dth in range(-20, 21, 5):
-            m = R_ @ mdir(g, th + dth) > 0                                    # only this half-plane's side
-            n = mdir(g, th + dth + 90)
-            tot, br = crossing(T_[m], U_[m], g['a'], n)
-            c = br + 0.15 * tot + 0.004 * abs(dth)
-            if tot > 0 and (best is None or c < best[0]): best = (c, th + dth)
-        out_s.append(best[1] if best else th)
-    return out_b, out_s
-def cell_score(g, X, bands, secs, bi, si):
-    """how far X lies outside cell (band bi, sector si), in metres; <= 0 inside"""
-    R_, t_ = radial(g, X)
-    s = np.full(len(X), -1e3)
-    if bi > 0: s = np.maximum(s, bands[bi - 1] - t_)
-    if bi < len(bands): s = np.maximum(s, t_ - bands[bi])
-    th1, th2 = secs[si], secs[(si + 1) % len(secs)]
-    s = np.maximum(s, -(R_ @ mdir(g, th1 + 90)))                             # inside the wedge from its first edge
-    s = np.maximum(s, -(R_ @ mdir(g, th2 - 90)))                             # and from its second
-    return s
-def fan(poly): return [np.array([poly[0][:8], poly[k][:8], poly[k + 1][:8]]) for k in range(1, len(poly) - 1)]
-def walls(rows, c):
-    """the plate's thickness: a dark wall down from every open edge"""
-    X = rows[:, :3]; kk = [tuple(k) for k in np.round(X * 2000).astype(np.int64)]
-    cnt = {}
-    for i in range(0, len(rows), 3):
-        for a_, b_ in ((i, i + 1), (i + 1, i + 2), (i + 2, i)):
-            key = tuple(sorted((kk[a_], kk[b_]))); cnt[key] = cnt.get(key, 0) + 1
-    out = []
-    for i in range(0, len(rows), 3):
-        for a_, b_ in ((i, i + 1), (i + 1, i + 2), (i + 2, i)):
-            if cnt[tuple(sorted((kk[a_], kk[b_])))] != 1: continue
-            pa, pb, na, nb_ = X[a_], X[b_], rows[a_, 5:8], rows[b_, 5:8]
-            qa, qb = pa - THICK * na, pb - THICK * nb_
-            wn = np.cross(pb - pa, (na + nb_) / 2); wn /= np.linalg.norm(wn) + 1e-12
-            if wn @ ((pa + pb) / 2 - c) < 0: wn = -wn
-            v = lambda P_: np.r_[P_, DUV, wn]
-            out += [np.array([v(pa), v(pb), v(qb)]), np.array([v(pa), v(qb), v(qa)])]
-    return np.concatenate(out).reshape(-1, 8) if out else np.zeros((0, 8))
-def plates_of(g, pc):
-    bands0, secs0 = LAYOUT[re.sub('[LR]$', '', g['id'])]
-    bands, secs = tune(g, pc, bands0, secs0)
-    got = []
-    for bi in range(len(bands) + 1):
-        for si in range(len(secs)):
-            phi = cell_score(g, pc[:, :3], bands, secs, bi, si) + GAP / 2
-            F3 = phi.reshape(-1, 3)
-            R3 = pc.reshape(-1, 3, 8)
-            rows = [R3[F3.max(1) <= 0].reshape(-1, 8)]
-            for ti in np.nonzero((F3.min(1) < 0) & (F3.max(1) > 0))[0]:
-                tri = [np.r_[pc[3 * ti + q], phi[3 * ti + q], -phi[3 * ti + q]] for q in range(3)]
-                rows += fan(clip(tri, 8, 9))
-            rows = np.concatenate([x.reshape(-1, 8) for x in rows])
-            if len(rows) < 30: continue
-            mid = (secs[si] + ((secs[(si + 1) % len(secs)] - secs[si]) % 360) / 2)
-            got.append((bi, mid, np.concatenate([rows, walls(rows, rows[:, :3].mean(0) - 0.05 * mdir(g, mid))])))
-    return got, len(bands)
-SIDES = (('FRONT', [0, 0, 1]), ('REAR', [0, 0, -1]), ('TOP', [0, 1, 0]), ('UNDERSIDE', [0, -1, 0]))
-def plate_name(g, rows):
-    nrm = rows[:, 5:8].mean(0)
-    sx = np.sign(g['a'][0]) or 1
-    opts = SIDES + (('OUTER', [sx, 0, 0]), ('INNER', [-sx, 0, 0])) if g['a'][0] else SIDES + (('LEFT', [1, 0, 0]), ('RIGHT', [-1, 0, 0]))
-    return max(opts, key=lambda o: nrm @ o[1])[0]
-plates = []                                                                # (segment, plate name, rows)
+def cast(O, D, T3, U3):
+    """outermost hit of each ray (origin O, direction D) on triangles T3: distance (0 = none) and the uv there"""
+    e1, e2 = T3[:, 1] - T3[:, 0], T3[:, 2] - T3[:, 0]
+    best = np.zeros(len(O)); buv = np.zeros((len(O), 2))
+    for i in range(0, len(O), 128):
+        o, d = O[i:i + 128, None], D[i:i + 128, None]
+        pv = np.cross(d, e2); det = np.einsum('rtk,tk->rt', pv, e1)
+        ok = np.abs(det) > 1e-12; inv = np.where(ok, 1 / np.where(ok, det, 1), 0)
+        tv = o - T3[:, 0]; uu = np.einsum('rtk,rtk->rt', tv, pv) * inv
+        qv = np.cross(tv, e1); vv = np.einsum('rtk,rtk->rt', np.broadcast_to(d, qv.shape), qv) * inv
+        tt = np.einsum('tk,rtk->rt', e2, qv) * inv
+        hit = ok & (uu >= 0) & (vv >= 0) & (uu + vv <= 1) & (tt > 0)
+        tt = np.where(hit, tt, -1); k = tt.argmax(1); r = np.arange(len(k))
+        best[i:i + 128] = np.maximum(tt[r, k], 0)
+        w0 = 1 - uu[r, k] - vv[r, k]
+        buv[i:i + 128] = w0[:, None] * U3[k, 0] + uu[r, k][:, None] * U3[k, 1] + vv[r, k][:, None] * U3[k, 2]
+    return best, buv
+mold = []
 for g, pc in zip(S, pieces):
-    got, nb = plates_of(g, pc)
-    BAND = {0: [''], 1: [' UPPER', ' LOWER'], 2: [' UPPER', ' MIDDLE', ' LOWER']}[nb]
-    up = g['u'][1] < 0                                                       # band 0 is the top for a hanging bone
-    for bi, mid, rows in got:
-        face = rows[rows[:, 3] != DUV[0]]
-        side = plate_name(g, face)
-        ar = np.linalg.norm(np.cross(face[1::3, :3] - face[0::3, :3], face[2::3, :3] - face[0::3, :3]), axis=1).sum() / 2
-        plates.append((g, side + BAND[bi if up else nb - bi], rows))
-        print(f"  {g['id']:8s} {plates[-1][1]:22s} {ar * 1e4:7.0f} cm2")
-print('plates:', len(plates))
-
-# ---- write: one node + mesh per piece, int16 positions, int8 normals, uint16 UVs (KHR_mesh_quantization), the paint
-# the page inlines this file as base64; GitHub's secret scanner refuses a push when a run of it happens to read like a
-# Google API key (AIza + 35 chars). Shift the alignment (JSON padding) and, if every alignment still has one, change the
-# unused fourth position component (salt) until none does.
-def pack(salt):
-    blobs, views, accs, nodes, meshes = [], [], [], [], []
-    def add(data, target=None, stride=None):
-        off = sum(len(x) for x in blobs); blobs.append(data + b'\0' * (-len(data) % 4))
-        v = {'buffer': 0, 'byteOffset': off, 'byteLength': len(data)}
-        if target: v['target'] = target
-        if stride: v['byteStride'] = stride
-        views.append(v); return len(views) - 1
-    for j, (g, label, pc) in enumerate(plates):
-        X, U, N = pc[:, :3], pc[:, 3:5], pc[:, 5:8]
-        lo, hi = X.min(0), X.max(0); c = (lo + hi) / 2; e = np.maximum((hi - lo) / 2, 1e-6)
-        qp = np.full((len(X), 4), salt, np.int16); qp[:, :3] = np.round((X - c) / e * 32767)
-        qn = np.full((len(X), 4), salt, np.int8); qn[:, :3] = np.round(N / np.linalg.norm(N, axis=1, keepdims=True) * 127)
-        qu = np.round(np.clip(U, 0, 1) * 65535).astype(np.uint16)
-        k = len(accs)
-        accs += [{'bufferView': add(qp.tobytes(), 34962, 8), 'componentType': 5122, 'normalized': True, 'count': len(X), 'type': 'VEC3', 'min': [-32767] * 3, 'max': [32767] * 3},
-                 {'bufferView': add(qn.tobytes(), 34962, 4), 'componentType': 5120, 'normalized': True, 'count': len(X), 'type': 'VEC3'},
-                 {'bufferView': add(qu.tobytes(), 34962, 4), 'componentType': 5123, 'normalized': True, 'count': len(X), 'type': 'VEC2'}]
-        nm = f"shell-{g['id']}-{sum(x[0] is g for x in plates[:j]) + 1}"
-        meshes.append({'name': nm, 'primitives': [{'attributes': {'POSITION': k, 'NORMAL': k + 1, 'TEXCOORD_0': k + 2}, 'material': 0}]})
-        nodes.append({'mesh': len(meshes) - 1, 'name': nm, 'translation': c.tolist(), 'scale': e.tolist(), 'extras': {'piece': g['id'], 'plate': label}})
-    vi = add(JPEG)
-    G = {'asset': {'version': '2.0', 'generator': 'vx7 split.py'}, 'extensionsUsed': ['KHR_mesh_quantization'], 'extensionsRequired': ['KHR_mesh_quantization'],
-         'scene': 0, 'scenes': [{'nodes': list(range(len(nodes)))}], 'nodes': nodes, 'meshes': meshes,
-         'materials': [{'pbrMetallicRoughness': {'baseColorTexture': {'index': 0}, 'metallicFactor': 0.0, 'roughnessFactor': 0.6}}],
-         'textures': [{'source': 0, 'sampler': 0}], 'samplers': [{'magFilter': 9729, 'minFilter': 9987}], 'images': [{'bufferView': vi, 'mimeType': 'image/jpeg'}],
-         'accessors': accs, 'bufferViews': views, 'buffers': [{'byteLength': sum(len(x) for x in blobs)}]}
-    bn = b''.join(blobs)
-    for pad in range(0, 12, 4):
-        js = json.dumps(G, separators=(',', ':')).encode(); js += b' ' * (-len(js) % 4 + pad)
-        glb = struct.pack('<III', 0x46546C67, 2, 12 + 8 + len(js) + 8 + len(bn)) + struct.pack('<II', len(js), 0x4E4F534A) + js + struct.pack('<II', len(bn), 0x004E4942) + bn
-        if not re.search(rb'AIza[0-9A-Za-z_-]{35}', base64.b64encode(glb)): return glb
-glb = next(filter(None, map(pack, range(64))), None)
-if glb is None: sys.exit('every salt still reads like an API key')
-open(OUT, 'wb').write(glb)
-print('wrote', OUT, len(glb), 'bytes')
+    u, f, l = frame_of(g)
+    T3 = pc[:, :3].reshape(-1, 3, 3); U3 = pc[:, 3:5].reshape(-1, 3, 2)
+    tp = (pc[:, :3] - g['a']) @ u
+    t0 = np.floor(tp.min() / DT) * DT; nt = int(np.ceil((tp.max() - t0) / DT)) + 1
+    th = np.arange(NTH) * 2 * np.pi / NTH
+    D = np.cos(th)[None, :, None] * f + np.sin(th)[None, :, None] * l
+    O = g['a'] + (t0 + np.arange(nt) * DT)[:, None, None] * u + 0 * D
+    r, uv = cast(O.reshape(-1, 3), np.broadcast_to(D, O.shape).reshape(-1, 3), T3, U3)
+    px = RGB[np.clip((uv[:, 1] * RGB.shape[0]).astype(int), 0, RGB.shape[0] - 1), np.clip((uv[:, 0] * RGB.shape[1]).astype(int), 0, RGB.shape[1] - 1)]
+    px[r == 0] = 0
+    mold.append({'id': g['id'], 'a': g['a'].round(4).tolist(), 'u': u.round(5).tolist(), 'f': f.round(5).tolist(), 'l': l.round(5).tolist(),
+                 't0': round(float(t0), 4), 'dt': DT, 'nt': nt, 'nth': NTH,
+                 'r': base64.b64encode(np.round(r * 1000).astype(np.uint16).tobytes()).decode(),
+                 'c': base64.b64encode(px.astype(np.uint8).tobytes()).decode()})
+    print(f"{g['id']:8s} {nt:3d} x {NTH} samples, {int((r > 0).mean() * 100)}% hit, r {r[r > 0].min():.2f}-{r.max():.2f} m")
+txt = json.dumps({'segments': mold}, separators=(',', ':'))
+assert not re.search(r'AIza[0-9A-Za-z_-]{35}', txt), 'a run of the mould reads like an API key'
+open(OUT, 'w').write(txt)
+print('wrote', OUT, len(txt), 'bytes')

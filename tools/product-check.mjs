@@ -69,7 +69,7 @@ try {
   await page.evaluate(() => LIVE.setView('front'));
   await page.waitForTimeout(1200);
   const at = await page.evaluate(() => {
-    const v = LIVE.mech.worldPos('shell-head-1');
+    const v = LIVE.mech.worldPos('shell-head-1-1');
     return LIVE.st.project(v);
   });
   await page.mouse.click(at[0], at[1]);

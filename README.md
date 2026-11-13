@@ -2,7 +2,7 @@
 
 A product page for a white fighting mech that you can drive like a game character and take apart: one offline HTML
 page. He walks when you arrive; turn, zoom and pan around him while he moves; make him run, jump, roll, slash, block
-and shoot; then pull the armor off piece by piece and watch the motors and planetary gears work inside.
+and shoot; then pull the armor off plate by plate and watch the motors and planetary gears work inside.
 
 **Try it: https://eddiesk-cell.github.io/vx7-teardown/** (a 5.5 MB page; best on a laptop or desktop)
 
@@ -14,23 +14,22 @@ and shoot; then pull the armor off piece by piece and watch the motors and plane
 
 ## How it is made
 
-- **Outside: a painted 3D shell made from pictures.** `ref/vx7-reference.png` is the design; `ref/vx7-turnaround.png`
-  (front, side, back) and `ref/vx7-exploded.png` were made from it. The front view, with shield and blade cut out
-  (`ref/vx7-front-cutout.png`), went through Hunyuan3D-2mini (shape) and Hunyuan3D paint, both run locally with MLX.
-  `tools/shell/` holds every step: cut-out, clean-up, joint measurement, web packing (int16 positions, JPEG texture, 3.5 MB).
-- **The shell comes apart like the exploded reference** (`ref/vx7-exploded.png`; `tools/shell/split.py` writes
-  `vx7-shared/assets/vx7-armor.glb`). First at the joints into 17 pieces (helmet, chest, pelvis, and per side shoulder,
-  forearm, hand, thigh, shin, ankle, foot): each joint cut slides to the dark mechanical gap in the paint, and round the
-  hips it follows the gap round the pelvis plates (a minimum cut). Then each piece into **68 armor plates** on straight
-  panel lines: bands across the bone and sectors along it, each line nudged to the nearest painted seam. Plates keep a
-  6 mm panel groove and get a dark 12 mm edge, so they come off as real panels; every piece is one solid surface and the
-  normals are shared, so the assembled shell shows only its panel lines.
+- **The armor is built in code, shaped on a mould of the design.** `ref/vx7-reference.png` is the design;
+  `ref/vx7-turnaround.png` (front, side, back) and `ref/vx7-exploded.png` were made from it. The front view went
+  through Hunyuan3D-2mini (shape) and Hunyuan3D paint, run locally with MLX, into a painted shell
+  (`vx7-shared/assets/vx7-shell.glb`). The page never draws that mesh: `tools/shell/split.py` cuts it at the joints
+  into 17 body segments and measures each round its bone (radius and paint colour every 1 cm and 2.5 degrees) into
+  `vx7-shared/assets/vx7-mold.json`. `vx7-shared/shell.js` builds **about 340 armor plates** from that mould: curved
+  panels on straight panel lines (bands across the bone, sectors round it, each nudged to a painted seam), a 6 mm
+  groove, a chamfered rim, a dark 12 mm edge, bolts at the corners, every other plate standing proud for layers, and
+  a finish from the paint under it (white, steel or graphite, orange trim). The chest leaves a bolted window for the
+  reactor. Plates at rest draw as one merged piece per joint and split back into parts the moment one moves.
 - **Inside: built from code** (`vx7-shared/inner.js`, `mech.js`): graphite frame, spine, cables, the chest reactor, knee /
   hock / elbow hydraulics (bore 50, rod 28, stroke 180 mm, rod length from the law of cosines), the shield and the plasma blade.
 - **10 planetary drives** (neck, waist, shoulders, elbows, hips, knees), each **87 separate parts**: frameless BLDC motor
   (stator with 24 copper coils, rotor with 20 magnets and the encoder disc), two planetary stages (sun 12T, carrier,
   3 planets 30T, ring 72T, 7:1 each, **49:1** total), cross-roller bearing (outer race, inner race, cage, 24 balls),
-  collar and circlips. 100 toothed gears mesh and turn from the joint angle. **998 parts** in all; a drive's small parts
+  collar and circlips. 100 toothed gears mesh and turn from the joint angle. **1,273 parts** in all; a drive's small parts
   join the scene only once it is opened, so the walking page draws about as much as before.
 - **Joints** sit on centres measured on the shell (`REST` in `vx7-shared/kin.js`); every pose, gear angle, torque, rpm and the
   reactor kW readout is a function of `(sequence, tau)` there.

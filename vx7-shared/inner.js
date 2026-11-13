@@ -39,10 +39,10 @@ export function addInner(C) {
     for (const y of [0.22, 0.32, 0.42]) mb.add(box(0.2, 0.01, 0.01, 0.003), {p: [0, y, -0.2], c: COL.orange});
     solid(bk, mb);
   }
-  // ---------------------------------------------------------------- reactor: just behind the painted core in the chest
+  // ---------------------------------------------------------------- reactor: in the window of the chest armor
   {
     const T = ['reactor'];
-    const c = [-0.015, 2.9 - W, 0.06];
+    const c = [-0.015, 2.9 - W, 0.17];
     const h = mkPart(N.chest, 'reactor-housing', 'REACTOR HOUSING', 'reactor', {tags: T, pos: c, out: [0, 0, 1], dist: 0.7, stage: 2});
     const m = new Merge().add(annulus(0.16, 0.095, 0.09).rotateZ(Math.PI / 8), {c: G});
     for (const a of ring(8, 0, (t) => t)) m.add(cyl(0.01, 0.01, 0.014, 8), {p: [Math.cos(a) * 0.14, Math.sin(a) * 0.14, 0.05], r: [Math.PI / 2, 0, 0], c: COL.chrome});
@@ -58,7 +58,7 @@ export function addInner(C) {
     addMesh(gl, new THREE.SphereGeometry(0.05, 18, 12), 'glow', {args: ['#ffc15a', 0.95], shadow: false});
     for (const [s, sx] of L2) {
       const p = mkPart(N.chest, 'coolant-' + s, s + ' COOLANT PIPE', 'reactor', {tags: T, out: [sx, 0.4, 0.2], dist: 0.55, stage: 2});
-      const curve = new THREE.CatmullRomCurve3([new V3(sx * 0.14, c[1] - 0.04, 0.05), new V3(sx * 0.2, c[1] - 0.12, 0.0), new V3(sx * 0.3, c[1] - 0.05, -0.06), new V3(sx * 0.4, c[1] + 0.12, -0.08)]);
+      const curve = new THREE.CatmullRomCurve3([new V3(sx * 0.14, c[1] - 0.04, c[2] - 0.01), new V3(sx * 0.2, c[1] - 0.12, c[2] - 0.08), new V3(sx * 0.3, c[1] - 0.05, -0.06), new V3(sx * 0.4, c[1] + 0.12, -0.08)]);
       const mm = new Merge().add(new THREE.TubeGeometry(curve, 20, 0.014, 8), {c: COL.orange});
       for (const t of [0.05, 0.95]) mm.add(cyl(0.024, 0.024, 0.03, 10), {p: curve.getPointAt(t).toArray(), q: new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), curve.getTangentAt(t)), c: COL.chrome});
       solid(p, mm);

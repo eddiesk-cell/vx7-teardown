@@ -47,7 +47,7 @@ const ISO = {
 };
 const LABELS = [
   ['reactor-core', 'REACTOR CORE', 'ORANGE TORUS · COOLANT LOOPS'], ['drive-neck', 'NECK DRIVE', '49:1 · 2 STAGES'], ['drive-shR', 'R SHOULDER DRIVE', 'SUN 12 · PLANET 30 · RING 72'],
-  ['drive-elR', 'R ELBOW DRIVE', 'FRAMELESS BLDC + PLANETARY'], ['blade', 'PLASMA BLADE', '1.3 M · ORANGE'], ['shell-head-1', 'HELMET', 'PAINTED SHELL · CLICK TO PULL'], ['shield-spine', 'SHIELD', 'ROTARY DRUM MOUNT'],
+  ['drive-elR', 'R ELBOW DRIVE', 'FRAMELESS BLDC + PLANETARY'], ['blade', 'PLASMA BLADE', '1.3 M · ORANGE'], ['shell-head-1-1', 'HELMET', 'PAINTED SHELL · CLICK TO PULL'], ['shield-spine', 'SHIELD', 'ROTARY DRUM MOUNT'],
   ['drive-waist', 'WAIST DRIVE', 'SPINE RINGS ABOVE'], ['drive-hipL', 'L HIP DRIVE', '49:1'], ['drive-hipR', 'R HIP DRIVE', '49:1'], ['act-knee-R', 'KNEE ACTUATOR', 'BORE 50 · ROD 28 · STROKE 180 MM'],
   ['act-hock-L', 'HOCK ACTUATOR', 'BORE 50 · ROD 28 · STROKE 180 MM'], ['drive-kneeL', 'L KNEE DRUM', '49:1'],
 ];
@@ -265,7 +265,7 @@ export function runLive({film = null} = {}) {
     ray.setFromCamera(ndc, st.camera);
     for (const h of ray.intersectObjects(mech.pickables, false)) {
       const p = h.object.userData.part;
-      if (p && p.da > 0.3 && h.object.visible) return p;
+      if (p && p.da > 0.3 && (h.object.visible || (p.proxy && p.proxy.mesh.visible))) return p;
     }
     return null;
   };
@@ -377,6 +377,8 @@ export function runLive({film = null} = {}) {
 
   // ------------------------------------------------------------ the frame
   const perf = {n: 0, sum: 0, slow: 0, age: 0};
+  let PX = null;
+  const proxies = () => PX || (mech.parts.some((p) => p.proxy) ? (PX = [...new Set(mech.parts.map((p) => p.proxy).filter(Boolean))]) : []);
   const tgtA = (p) => {
     // the small parts inside a drive (balls, coils, magnets, planets) are drawn only once the drive is opened up
     if (p.bit && S.k < 0.2 && dispE.xray < 0.01 && !(S.iso && S.isoE > 0) && p.module.pull < 0.01) return [0, 0];
@@ -414,6 +416,16 @@ export function runLive({film = null} = {}) {
       p.hv = (p.hv ?? 0) + (tgt - (p.hv ?? 0)) * e(0.1);
       const pulled = (p.module || p).pullT > 0.5;
       mech.style(p, Math.max(0, Math.min(1, p.da)), Math.min(1, p.de), Math.max(p.hv, pulled ? 0.5 : 0), pulled ? 1 : 0);
+    }
+    // armor at rest draws as one merged piece per joint; any plate that moves, ghosts, glows or is pulled splits it
+    for (const px of proxies()) {
+      const a0 = px.plates[0].da;
+      const rest = px.plates.every((p) => p.e < 1e-3 && Math.abs(p.da - a0) < 0.01 && (p.hv ?? 0) < 0.01 && !p.pullT && p.pull < 1e-3);
+      px.mesh.visible = rest && a0 > 0.01;
+      px.mesh.material.opacity = Math.max(0, Math.min(1, a0)); // x-ray ghosts the merged piece like its plates
+      px.mesh.material.depthWrite = a0 > 0.5;
+      px.mesh.castShadow = a0 > 0.5;
+      for (const p of px.plates) p.group.visible = !rest;
     }
     // camera
     const tg = camTarget();

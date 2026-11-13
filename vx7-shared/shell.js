@@ -10,9 +10,12 @@ import MOLD from './assets/vx7-mold.json';
 import {claws} from './claws.js';
 
 const V3 = THREE.Vector3;
-const GAP = 0; // m: plates meet edge to edge; a seam only shows once one comes off
 const THICK = 0.022; // m: plate thickness (deep enough to stand over the sunken mechanics beside it)
-const CHAMFER = 0; // m: no rim, so the assembled armor reads as one smooth shell
+const PGAP = 0.007; // m: each armor plate stands this far in from its cell, so the mechanics show between plates
+const DOME = 0.004; // m: an armor plate rises this much more toward its middle
+const BEVEL = 0.006; // m: and rolls down this much at its rim
+const SEAM = 0.03; // m: how far a seam between bands bows down the front (alternately up), following the body
+const SLANT = 2.4; // mould columns (2.5 deg each): how far a seam round the bone leans across a band, alternately
 const LIFT = 0.01; // m: the shell sits this far out from the mould, so no inner part pokes through it
 const MLIFT = -0.006; // m: exposed mechanics sit this far in, under the armor's edge
 const RIB = 0.004; // m: depth of the ribs on an exposed actuator sleeve
@@ -141,13 +144,14 @@ function smoothR(r, nt, nth) {
 const DETAIL = `
 varying vec4 vPl;
 varying vec2 vMk;
+varying float vEd;
 float box(vec2 p, vec2 c, vec2 h, vec2 fw) { vec2 q = h - abs(p - c); return clamp(min(q.x / fw.x, q.y / fw.y) + 0.5, 0.0, 1.0); }
 float ln(float x, float w, float fw) { return 1.0 - smoothstep(w, w + fw, abs(x)); }
 void plateDetail(inout vec3 c) {
   vec2 p = vPl.xy;
   vec2 hw = vPl.zw;
   vec2 fw = max(fwidth(p), vec2(1e-5));
-  float d = min(min(p.x, hw.x - p.x), min(p.y, hw.y - p.y));
+  float d = vEd;
   float f = max(fwidth(d), 1e-5);
   vec3 dark = vec3(0.07, 0.075, 0.085);
   vec3 orange = vec3(0.93, 0.45, 0.1);
@@ -169,6 +173,7 @@ void plateDetail(inout vec3 c) {
   c = mix(c, vec3(0.5, 0.51, 0.53) + 0.4 * c, (1.0 - smoothstep(0.15, 0.45, l)) * (1.0 - smoothstep(0.1, 0.3, sat)));
   float k = vMk.y;
   bool big = min(hw.x, hw.y) > 0.09;
+  vec3 c0 = c;
   if (big && k < 0.2) {
     vec2 vc = vec2(hw.x * 0.6, hw.y * 0.5);
     float v = box(p, vc, vec2(0.024, 0.03), fw);
@@ -188,6 +193,7 @@ void plateDetail(inout vec3 c) {
   } else if (big) {
     for (int i = 0; i < 4; i++) c = mix(c, dark, box(p, vec2(0.05, 0.04 + 0.009 * float(i)), vec2(0.007 - 0.002 * float(i % 2), 0.0028), fw));
   }
+  c = mix(c0, c, smoothstep(0.024, 0.03, d)); // details stay inside the inset line, clear of cut corners
   if (big) c *= 1.0 - 0.6 * ln(d - 0.022, 0.0009, f);
   c *= 1.0 - 0.8 * ln(d, 0.0025, f);
 }`;
@@ -195,8 +201,8 @@ const plateMat = (map = null) => {
   const m = new THREE.MeshStandardMaterial({map, vertexColors: true, roughness: 0.55, metalness: 0.1, envMapIntensity: 0.55, side: THREE.DoubleSide, shadowSide: THREE.BackSide, transparent: true});
   m.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float glow;\nattribute vec4 pl;\nattribute vec2 mk;\nvarying float vGlow;\nvarying vec4 vPl;\nvarying vec2 vMk;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = glow;\nvPl = pl;\nvMk = mk;');
+      .replace('#include <common>', '#include <common>\nattribute float glow;\nattribute vec4 pl;\nattribute vec2 mk;\nattribute float ed;\nvarying float vGlow;\nvarying vec4 vPl;\nvarying vec2 vMk;\nvarying float vEd;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = glow;\nvPl = pl;\nvMk = mk;\nvEd = ed;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vGlow;' + DETAIL)
       .replace('#include <color_fragment>', '#include <color_fragment>\n\tif (!gl_FrontFacing) diffuseColor.rgb = vec3(0.09, 0.095, 0.105);\n\telse if (vPl.z > 0.0) plateDetail(diffuseColor.rgb);')
@@ -208,76 +214,73 @@ const plateMat = (map = null) => {
   return m;
 };
 
-// one plate: rows i0..i1 along the bone, columns j0..j1 round it (wrapping), from the mould grid g
-function plateGeo(g, i0, i1, j0, j1, look, {hole = null} = {}) {
-  const lift = look.mech ? MLIFT : LIFT;
+// one plate on the mould grid g, as an nr x nc grid of points; map(qi, qj) places grid point (qi, qj) on the mould:
+// i and j are fractional mould rows (along the bone) and columns (round it), iB/iH the plate's bottom row and height and
+// jL/jW its left column and width at that point, so a plate can have any outline (slanted seams, cut corners)
+function plateGeo(g, nr, nc, map, look, {hole = null} = {}) {
   const {a, u, f, l, t0, dt, nt, nth, r} = g;
-  const nr = i1 - i0 + 1;
-  const nc = j1 - j0 + 1;
   const P = (t, th, rad) => [a[0] + t * u[0] + rad * (Math.cos(th) * f[0] + Math.sin(th) * l[0]), a[1] + t * u[1] + rad * (Math.cos(th) * f[1] + Math.sin(th) * l[1]), a[2] + t * u[2] + rad * (Math.cos(th) * f[2] + Math.sin(th) * l[2])];
-  // radius at a fractional sample (bilinear), so a hole's edge can be tested between samples
+  // radius at a fractional sample (bilinear)
   const R = (i, j) => {
     const i_ = Math.floor(i);
     const j_ = Math.floor(j);
     const fi = i - i_;
     const fj = j - j_;
-    const at_ = (ii, jj) => r[Math.min(ii, nt - 1) * nth + (((jj % nth) + nth) % nth)] / 1000;
-    return fi || fj ? at_(i_, j_) * (1 - fi) * (1 - fj) + at_(i_ + 1, j_) * fi * (1 - fj) + at_(i_, j_ + 1) * (1 - fi) * fj + at_(i_ + 1, j_ + 1) * fi * fj : at_(i_, j_);
+    const at_ = (ii, jj) => r[Math.min(Math.max(ii, 0), nt - 1) * nth + (((jj % nth) + nth) % nth)] / 1000;
+    return at_(i_, j_) * (1 - fi) * (1 - fj) + at_(i_ + 1, j_) * fi * (1 - fj) + at_(i_, j_ + 1) * (1 - fi) * fj + at_(i_ + 1, j_ + 1) * fi * fj;
   };
-  const ok = (i, j) => R(i, j) > 0;
   // the window is a round hole seen from the front: distance across, not in depth, and only on the front of the chest
-  const outside = (i, j) => {
+  const outside = (qi, qj) => {
     if (!hole) return true;
-    const x = P(t0 + i * dt, (j * 2 * Math.PI) / nth, R(i, j));
+    const m = map(qi, qj);
+    const x = P(t0 + m.i * dt, (m.j * 2 * Math.PI) / nth, R(m.i, m.j));
     return x[2] < hole.c.z || Math.hypot(x[0] - hole.c.x, x[1] - hole.c.y) > hole.r;
   };
-  const quad = (qi, qj) => ok(i0 + qi, j0 + qj) && ok(i0 + qi + 1, j0 + qj) && ok(i0 + qi, j0 + qj + 1) && ok(i0 + qi + 1, j0 + qj + 1) && outside(i0 + qi + 0.5, j0 + qj + 0.5);
   const pos = [];
   const col = [];
   const glow = [];
   const uvs = [];
   const pl = [];
+  const ed = [];
   const idx = [];
-  const H = (i1 - i0) * dt;
   const dth = (2 * Math.PI) / nth;
   // where a point (height t, angle th) falls in the paint atlas
   const T = g.tex;
   const UV = (t, th) => [(T.x + ((th - T.th0) / (T.th1 - T.th0)) * T.w) / g.AW, (T.y + (t - g.T0) / T.pxt + 0.5) / g.AH];
-  // outer surface: border rows and columns step in by half the groove and drop by the chamfer
   const vid = new Int32Array(nr * nc).fill(-1);
-  const outerAt = []; // [vertex, row, column] of the outer surface, for its normals
-  let finish;
-  let trim;
-  const seed = look.seed ?? 0;
   const at = (qi, qj) => {
     const k = qi * nc + qj;
     if (vid[k] >= 0) return vid[k];
-    const i = i0 + qi;
-    const j = j0 + qj;
+    const {i, j, iB, iH, jL, jW} = map(qi, qj);
     const rad = R(i, j);
-    const edge = qi === 0 || qj === 0 || qi === nr - 1 || qj === nc - 1;
-    const t = t0 + i * dt + (qi === 0 ? GAP / 2 : qi === nr - 1 ? -GAP / 2 : 0);
-    const th = (j * 2 * Math.PI) / nth + (qj === 0 ? GAP / 2 / rad : qj === nc - 1 ? -GAP / 2 / rad : 0);
-    // an exposed sleeve is ribbed: two rows in every three sit a little deeper (counted on the mould, so ribs line up),
-    // except along a smooth spine down its middle where its cable or piston rods run
-    const a_ = rad * qj * dth;
-    const w_ = rad * (nc - 1) * dth;
-    const spine = (look.seed ?? 0) < 0.8 && Math.abs(a_ - w_ / 2) < 0.028;
-    pos.push(...P(t, th, rad + lift - (edge ? CHAMFER : 0) - (look.mech && i % 3 && !spine ? RIB : 0)));
-    pl.push(qi * dt, a_, H, w_);
-    const lit = trim && !look.mech && qi === 2 && qj > 1 && qj < nc - 2; // a light line just inside the plate's top edge
-    col.push(...(lit ? FIN.orange : finish));
+    const t = t0 + i * dt;
+    const th = j * dth;
+    // plate coordinates in metres: along the bone from its lower edge, round it from its left edge, and its size here
+    const s_ = (i - iB) * dt;
+    const H = iH * dt;
+    const a_ = rad * (j - jL) * dth;
+    const W = rad * jW * dth;
+    const e = Math.max(0, Math.min(s_, H - s_, a_, W - a_)); // distance to the plate's edge
+    let off;
+    if (look.mech) {
+      // an exposed sleeve is ribbed: two rows in every three sit a little deeper (counted on the mould, so ribs line
+      // up), except along a smooth spine down its middle where its cable or piston rods run
+      const spine = (look.seed ?? 0) < 0.8 && Math.abs(a_ - W / 2) < 0.028;
+      off = MLIFT - (Math.round(i) % 3 && !spine && !look.flat ? RIB : 0);
+    } else off = LIFT + DOME * Math.min(1, e / 0.06) - BEVEL * (1 - Math.min(1, e / 0.012)); // domed, with a bevelled rim
+    pos.push(...P(t, th, rad + off));
+    pl.push(s_, a_, H, W);
+    ed.push(e);
+    const lit = look.trim && !look.mech && qi === 2 && e > 0.02; // a light line just inside the plate's lower edge
+    col.push(...(lit ? FIN.orange : [1, 1, 1])); // otherwise the paint shows as it is
     glow.push(lit ? 1 : 0);
     uvs.push(...UV(t, th));
     vid[k] = pos.length / 3 - 1;
-    outerAt.push([vid[k], i, j]);
     return vid[k];
   };
   const on = [];
-  for (let qi = 0; qi < nr - 1; qi++) for (let qj = 0; qj < nc - 1; qj++) if (quad(qi, qj)) on.push([qi, qj]);
-  if (on.length < 6) return null;
-  finish = [1, 1, 1]; // the paint shows as it is
-  trim = look.trim;
+  for (let qi = 0; qi < nr - 1; qi++) for (let qj = 0; qj < nc - 1; qj++) if (outside(qi + 0.5, qj + 0.5)) on.push([qi, qj]);
+  if (on.length < 4) return null;
   const has = new Set(on.map(([qi, qj]) => qi * nc + qj));
   for (const [qi, qj] of on) {
     const A = at(qi, qj);
@@ -299,6 +302,7 @@ function plateGeo(g, i0, i1, j0, j1, look, {hole = null} = {}) {
       glow.push(0, 0);
       uvs.push(uvs[v * 2], uvs[v * 2 + 1], uvs[v * 2], uvs[v * 2 + 1]);
       pl.push(0, 0, 0, 0, 0, 0, 0, 0);
+      ed.push(0, 0);
     }
     idx.push(n0, n0 + 3, n0 + 1, n0, n0 + 2, n0 + 3);
   };
@@ -314,25 +318,10 @@ function plateGeo(g, i0, i1, j0, j1, look, {hole = null} = {}) {
   geo.setAttribute('glow', new THREE.Float32BufferAttribute(glow, 1));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setAttribute('pl', new THREE.Float32BufferAttribute(pl, 4));
-  geo.setAttribute('mk', new THREE.Float32BufferAttribute(Array.from({length: pos.length / 3}, () => [look.mech ? 1 : 0, seed]).flat(), 2));
+  geo.setAttribute('ed', new THREE.Float32BufferAttribute(ed, 1));
+  geo.setAttribute('mk', new THREE.Float32BufferAttribute(Array.from({length: pos.length / 3}, () => [look.mech ? 1 : 0, look.seed ?? 0]).flat(), 2));
   geo.setIndex(idx);
-  geo.computeVertexNormals();
-  if (look.mech) return geo; // ribs keep their own normals, so they catch the light
-  // the outer surface takes its normal from the whole mould, not from this plate alone, so two plates that meet
-  // shade the same on both sides of the seam and the assembled armor shows no line
-  const nrm = geo.attributes.normal;
-  const cross = new V3();
-  for (const [v, i, j] of outerAt) {
-    const th = (j * 2 * Math.PI) / nth;
-    const ip = Math.min(i + 1, nt - 1);
-    const im = Math.max(i - 1, 0);
-    const dT = new V3(...P(t0 + ip * dt, th, R(ip, j))).sub(new V3(...P(t0 + im * dt, th, R(im, j))));
-    const dTh = new V3(...P(t0 + i * dt, th + (2 * Math.PI) / nth, R(i, j + 1))).sub(new V3(...P(t0 + i * dt, th - (2 * Math.PI) / nth, R(i, j - 1))));
-    cross.crossVectors(dTh, dT).normalize();
-    const out = new V3(nrm.getX(v), nrm.getY(v), nrm.getZ(v));
-    if (cross.dot(out) < 0) cross.negate();
-    nrm.setXYZ(v, cross.x, cross.y, cross.z);
-  }
+  geo.computeVertexNormals(); // each plate shades on its own: its dome, its bevel, a sleeve's ribs
   return geo;
 }
 
@@ -428,38 +417,90 @@ function build(C, tex) {
     cb[s.secs] = cb[0] + g.nth;
     const rows = (b) => rb[b];
     const cols = (k2) => cb[k2];
+    // the seams: between bands they bow along the body (down the front, up the back, alternating band by band); round
+    // the bone they lean across the band, alternating, so the plates taper like designed panels rather than tiles
+    const dth = (2 * Math.PI) / g.nth;
+    const amp = rb.map((_, b) => (b === 0 || b === s.bands ? 0 : ((b % 2 ? 1 : -1) * Math.min(SEAM, 0.18 * Math.min(rb[b] - rb[b - 1], rb[b + 1] - rb[b]) * g.dt)) / g.dt));
+    const Bnd = (b, j) => rb[b] - amp[b] * Math.cos(j * dth);
+    const Sct = (k2, uu) => cb[k2] + (k2 % 2 ? SLANT : -SLANT) * (s.secs > 4 ? 1 : 0.5) * (uu - 0.5);
+    const R0 = (i, j) => g.r[Math.round(i) * g.nth + ((Math.round(j) % g.nth) + g.nth) % g.nth] / 1000;
+    // an armor plate: its cell between those seams, stood in by PGAP, its corners cut (one of them deep)
+    const shaped = (bi, si, seed) => {
+      const hh = (x) => (((Math.sin(x * 127.1 + seed * 311.7) * 43758.5453) % 1) + 1) % 1;
+      const Hm = (rows(bi + 1) - rows(bi)) * g.dt;
+      const Wm = R0((rows(bi) + rows(bi + 1)) / 2, (cols(si) + cols(si + 1)) / 2) * (cols(si + 1) - cols(si)) * dth;
+      const gu = PGAP / Hm;
+      const gv = PGAP / Wm;
+      const big = Math.floor(hh(9) * 4);
+      const cut = [0, 1, 2, 3].map((c) => Math.min(0.45 * Math.min(Hm, Wm), c === big ? 0.32 * Math.min(Hm, Wm) : 0.008 + 0.022 * hh(c)));
+      const nu = Math.max(3, Math.round(((1 - 2 * gu) * Hm) / 0.01));
+      const nv = Math.max(3, Math.round(((1 - 2 * gv) * Wm) / 0.012));
+      const map = (qi, qj) => {
+        const uu = gu + ((1 - 2 * gu) * qi) / nu;
+        const yB = (uu - gu) * Hm;
+        const yT = (1 - gu - uu) * Hm;
+        const vL = gv + Math.max(0, cut[0] - yB, cut[2] - yT) / Wm;
+        const vR = 1 - gv - Math.max(0, cut[1] - yB, cut[3] - yT) / Wm;
+        const SL = Sct(si, uu);
+        const SR = Sct(si + 1, uu);
+        const j = SL + (SR - SL) * (vL + ((vR - vL) * qj) / nv);
+        const Bb = Bnd(bi, j);
+        const Bt = Bnd(bi + 1, j);
+        return {i: Bb + (Bt - Bb) * uu, j, iB: Bb + (Bt - Bb) * gu, iH: (Bt - Bb) * (1 - 2 * gu), jL: SL + (SR - SL) * vL, jW: (SR - SL) * (vR - vL)};
+      };
+      return [nu + 1, nv + 1, map];
+    };
+    // a mechanical sleeve: the whole cell on the straight grid, sunk under the armor (every step-th mould sample)
+    const sleeve = (bi, si, step) => {
+      const [i0, i1, j0, j1] = [rows(bi), rows(bi + 1), cols(si), cols(si + 1)];
+      const at = (q, a0, a1) => a0 + Math.min(q * step, a1 - a0);
+      return [Math.ceil((i1 - i0) / step) + 1, Math.ceil((j1 - j0) / step) + 1, (qi, qj) => ({i: at(qi, i0, i1), j: at(qj, j0, j1), iB: i0, iH: i1 - i0, jL: j0, jW: j1 - j0})];
+    };
+    const addPlate = (geo, id, name, dist) => {
+      // world rest positions -> the joint node's frame
+      geo.applyMatrix4(inv);
+      geo.computeBoundingSphere();
+      const nrm = geo.attributes.normal;
+      const lift = new V3();
+      for (let i = 0; i < nrm.count; i++) lift.add(v.fromBufferAttribute(nrm, i));
+      lift.applyQuaternion(q.clone().invert()).normalize();
+      const cen = geo.boundingSphere.center.clone().applyMatrix4(s.node.matrixWorld);
+      const away = new V3(...(s.out || [cen.x * 2.5, Math.max(-0.1, (cen.y - 2.2) * 0.4), 0.35])).normalize();
+      const dir = lift.clone().add(away.multiplyScalar(0.6)).normalize();
+      dir.y = Math.max(dir.y, -0.15); // never into the floor
+      const p = mkPart(s.node, id, name.replace('%', SIDE(lift, seg.id)), 'armor', {tags: s.tags, out: dir.applyQuaternion(q).toArray(), dist, stage: 1});
+      const m = plateMat(tex);
+      p.mats.push({m, base: 1, e0: 0});
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.userData.part = p;
+      p.group.add(mesh);
+      pickables.push(mesh);
+      added.push(p);
+    };
     for (let bi = 0; bi < s.bands; bi++) {
       for (let si = 0; si < s.secs; si++) {
-        const th = (((cols(si) + cols(si + 1)) / 2) * 2 * Math.PI) / g.nth;
+        const th = ((cols(si) + cols(si + 1)) / 2) * dth;
         const face = new V3(...g.f).multiplyScalar(Math.cos(th)).addScaledVector(new V3(...g.l), Math.sin(th));
         let lum = 0;
         let n = 0;
         for (let i = rows(bi); i <= rows(bi + 1); i++) for (let j = cols(si); j <= cols(si + 1); j++) if (g.r[i * g.nth + (j % g.nth)]) (lum += L(i, j % g.nth)), n++;
-        const look = {...lookOf(seg.id, bi, s.bands, face, n ? lum / n : 255), seed: ((k * 7919 + 13) % 101) / 101};
-        const geo = plateGeo(g, rows(bi), rows(bi + 1), cols(si), cols(si + 1), look, {hole: seg.id === 'torso' ? reactor : null});
-        if (!geo) continue;
-        // world rest positions -> the joint node's frame
-        geo.applyMatrix4(inv);
-        geo.computeBoundingSphere();
-        const nrm = geo.attributes.normal;
-        const lift = new V3();
-        for (let i = 0; i < nrm.count; i++) lift.add(v.fromBufferAttribute(nrm, i));
-        lift.applyQuaternion(q.clone().invert()).normalize();
-        const cen = geo.boundingSphere.center.clone().applyMatrix4(s.node.matrixWorld);
-        const away = new V3(...(s.out || [cen.x * 2.5, Math.max(-0.1, (cen.y - 2.2) * 0.4), 0.35])).normalize();
-        const side = SIDE(lift, seg.id);
-        const dir = lift.clone().add(away.multiplyScalar(0.6)).normalize();
-        dir.y = Math.max(dir.y, -0.15); // never into the floor
+        const seed = ((k * 7919 + 13) % 101) / 101;
+        const look = {...lookOf(seg.id, bi, s.bands, face, n ? lum / n : 255), seed};
+        const hole = seg.id === 'torso' ? reactor : null;
+        const id = `shell-${seg.id}-${bi + 1}-${si + 1}`;
         const band = s.bands > 1 ? ` ${bi + 1}` : '';
-        const p = mkPart(s.node, `shell-${seg.id}-${bi + 1}-${si + 1}`, `${s.name} ${side} ${look.mech ? 'ACTUATOR SLEEVE' : 'PLATE'}${band}`, 'armor', {tags: s.tags, out: dir.applyQuaternion(q).toArray(), dist: 0.38 + 0.2 * ((k++ * 7919) % 97) / 97, stage: 1});
-        const m = plateMat(tex);
-        p.mats.push({m, base: 1, e0: 0});
-        const mesh = new THREE.Mesh(geo, m);
-        mesh.castShadow = mesh.receiveShadow = true;
-        mesh.userData.part = p;
-        p.group.add(mesh);
-        pickables.push(mesh);
-        added.push(p);
+        const rnd = ((k++ * 7919) % 97) / 97;
+        // every cell has its sleeve of mechanics; an armor cell carries its plate on a plain, coarser sleeve that only
+        // shows between plates, and the two come off together
+        const sg = plateGeo(g, ...sleeve(bi, si, look.mech ? 1 : 2), {mech: true, flat: !look.mech, seed}, {hole});
+        if (look.mech) {
+          if (sg) addPlate(sg, id, `${s.name} % ACTUATOR SLEEVE${band}`, 0.3 + 0.15 * rnd);
+          continue;
+        }
+        const pg = plateGeo(g, ...shaped(bi, si, seed), look, {hole});
+        const geo = pg && sg ? mergeGeometries([pg, sg]) : pg || sg;
+        if (geo) addPlate(geo, id, `${s.name} % PLATE${band}`, 0.38 + 0.2 * rnd);
       }
     }
   }

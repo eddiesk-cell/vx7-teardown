@@ -19,14 +19,15 @@ and shoot; then pull the armor off plate by plate and watch the motors and plane
   through Hunyuan3D-2mini (shape) and Hunyuan3D paint, run locally with MLX, into a painted shell
   (`vx7-shared/assets/vx7-shell.glb`). The page never draws that mesh: `tools/shell/split.py` cuts it at the joints
   into 17 body segments and measures each round its bone (radius and paint colour every 1 cm and 2.5 degrees) into
-  `vx7-shared/assets/vx7-mold.json`. `vx7-shared/shell.js` builds **about 340 armor plates** from that mould:
-  curved panels on panel lines (bands across the bone, sectors round it, each nudged to a painted seam) that meet edge
-  to edge with shared normals, so the assembled armor reads as one smooth shell and a seam shows only when a plate
-  comes off. As in the design, white plates cover the front and outer faces, and the joints, the faces toward the body,
-  the waist, the neck and the places the design paints dark are left open as sunken, ribbed graphite actuator sleeves
-  with piston rods or an orange cable down their spine. The plates wear the design's paint: `split.py` also unrolls the
+  `vx7-shared/assets/vx7-mold.json`. `vx7-shared/shell.js` builds **about 340 armor pieces** from that mould, on panel
+  lines nudged to the painted seams: the seams between bands bow along the body and the seams round it lean, so no two
+  plates are the same rectangle. As in the design, white plates cover the front and outer faces, and the joints, the
+  faces toward the body, the waist, the neck and the places the design paints dark are left open as sunken, ribbed
+  graphite actuator sleeves with piston rods or an orange cable down their spine. Each white plate is shaped to its
+  place: stood in from its seams so the dark mechanics show round it, its corners cut (one deep), its face domed and
+  its rim bevelled down to a dark edge, riding on a sleeve of its own. The plates wear the design's paint: `split.py` also unrolls the
   painted shell round each bone into one atlas (0.625 degrees x 2.5 mm a pixel), so there are no texture seams. Code
-  adds the rest: an engraved groove round every plate and an inset line inside it, one detail per plate (a vent, a dark
+  adds the rest: an engraved groove round every plate and an inset line that follows its cut corners, one detail per plate (a vent, a dark
   hatch, an orange tab, a split line, hazard chevrons or a stencil mark), a dark 22 mm edge, light lines along the outer
   limbs and the chest, a glowing V visor, two swept fins, domed caps on the helmet and shoulders, and a window for the
   reactor. Hands and feet are built as claws (`vx7-shared/claws.js`): a talon hand on the left, a gauntlet fist closed

@@ -2,7 +2,7 @@
 
 A product page for a white fighting mech that you can drive like a game character and take apart: one offline HTML
 page. He walks when you arrive; turn, zoom and pan around him while he moves; make him run, jump, roll, slash, block
-and shoot; then pull the armor off panel by panel and watch the motors and planetary gears work inside.
+and shoot; then pull the armor off piece by piece and watch the motors and planetary gears work inside.
 
 **Try it: https://eddiesk-cell.github.io/vx7-teardown/** (a 5.5 MB page; best on a laptop or desktop)
 
@@ -18,9 +18,13 @@ and shoot; then pull the armor off panel by panel and watch the motors and plane
   (front, side, back) and `ref/vx7-exploded.png` were made from it. The front view, with shield and blade cut out
   (`ref/vx7-front-cutout.png`), went through Hunyuan3D-2mini (shape) and Hunyuan3D paint, both run locally with MLX.
   `tools/shell/` holds every step: cut-out, clean-up, joint measurement, web packing (int16 positions, JPEG texture, 3.5 MB).
-- **The shell is cut into ~70 armor panels in the page** (`vx7-shared/shell.js`): each triangle goes to the bone it sits
-  closest to, then by angle around the bone and band along it. Each panel rides its joint, flies out on EXPLODE and pulls
-  out on a click.
+- **The shell is cut at the joints into 17 armor pieces** (`tools/shell/split.py` writes `vx7-shared/assets/vx7-armor.glb`):
+  helmet, chest, pelvis, and per side shoulder, forearm, hand, thigh, shin, ankle and foot. Each joint is cut in the dark
+  mechanical gap nearest to it in the paint (the cut slides along the bone to where it crosses the least white armor);
+  around the hips, where the pelvis plates overlap the thighs, the line follows the dark gap round those plates (a
+  minimum cut). Each piece is one solid piece of surface (stray bits go to the piece around them), cut edges are clipped
+  smooth and the normals are shared, so the assembled shell shows no seam. Each piece rides its joint, flies out on
+  EXPLODE and pulls out on a click.
 - **Inside: built from code** (`vx7-shared/inner.js`, `mech.js`): graphite frame, spine, cables, the chest reactor, knee /
   hock / elbow hydraulics (bore 50, rod 28, stroke 180 mm, rod length from the law of cosines), the shield and the plasma blade.
 - **10 planetary drives** (neck, waist, shoulders, elbows, hips, knees): frameless BLDC motor (24 coil slots, 20 magnets,

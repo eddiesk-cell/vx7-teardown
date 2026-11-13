@@ -47,7 +47,7 @@ const ISO = {
 };
 const LABELS = [
   ['reactor-core', 'REACTOR CORE', 'ORANGE TORUS · COOLANT LOOPS'], ['drive-neck', 'NECK DRIVE', '49:1 · 2 STAGES'], ['drive-shR', 'R SHOULDER DRIVE', 'SUN 12 · PLANET 30 · RING 72'],
-  ['drive-elR', 'R ELBOW DRIVE', 'FRAMELESS BLDC + PLANETARY'], ['blade', 'PLASMA BLADE', '1.3 M · ORANGE'], ['shell-head-00', 'HELMET', 'PAINTED SHELL · CLICK TO PULL'], ['shield-spine', 'SHIELD', 'ROTARY DRUM MOUNT'],
+  ['drive-elR', 'R ELBOW DRIVE', 'FRAMELESS BLDC + PLANETARY'], ['blade', 'PLASMA BLADE', '1.3 M · ORANGE'], ['shell-head', 'HELMET', 'PAINTED SHELL · CLICK TO PULL'], ['shield-spine', 'SHIELD', 'ROTARY DRUM MOUNT'],
   ['drive-waist', 'WAIST DRIVE', 'SPINE RINGS ABOVE'], ['drive-hipL', 'L HIP DRIVE', '49:1'], ['drive-hipR', 'R HIP DRIVE', '49:1'], ['act-knee-R', 'KNEE ACTUATOR', 'BORE 50 · ROD 28 · STROKE 180 MM'],
   ['act-hock-L', 'HOCK ACTUATOR', 'BORE 50 · ROD 28 · STROKE 180 MM'], ['drive-kneeL', 'L KNEE DRUM', '49:1'],
 ];

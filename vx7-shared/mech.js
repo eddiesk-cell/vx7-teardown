@@ -296,32 +296,44 @@ function core() {
       fn(p);
       return p;
     };
-    const planetsOf = (st, g) => {
-      // sun, three planets on pins, carrier spider, ring: one stage's gears, phased to mesh exactly (sun tooth at 0 deg, planet gap at its pin)
-      const sunG = new THREE.Group();
-      const carG = new THREE.Group();
-      g.group.add(sunG, carG);
-      const ms = new Merge().add(gearGeo(GEAR.Zs, false, 8), {c: COL.steel}).add(cyl(3, 3, 16, 12), {r: [Math.PI / 2, 0, 0], c: COL.chrome});
-      ms.add(annulus(6, 3.4, 1.2), {p: [0, 0, 4.4], c: COL.dark});
-      addMesh({mats: g.mats, group: sunG}, ms.build(), 'metal').userData.part = g;
-      const mc = new Merge().add(cyl(8, 8, 1.6, 16), {p: [0, 0, -5.3], r: [Math.PI / 2, 0, 0], c: COL.dark});
-      for (let k = 0; k < 3; k++) {
+    // a part that rides another part (a ball on its cage, a coil on its stator) and flies straight out of it
+    const bit = (parent, id, name, pos, ang, dist, fn) => {
+      const p = mkPart(parent, `drive-${def.id}-${id}`, `${def.name} ${name}`, 'drive', {tags, pos, out: [Math.cos(ang), Math.sin(ang), 0], dist, stage: 3});
+      p.group.rotation.z = ang;
+      p.module = mod;
+      p.sub = p.bit = true;
+      fn(p);
+      return p;
+    };
+    const gearsOf = (st, label, home, ez, sunEz) => {
+      // one stage: carrier spider with pins (turns at the carrier speed and carries the planets), sun, three planets,
+      // phased to mesh exactly (sun tooth at 0 deg, planet gap at its pin)
+      const car = sub('carrier' + st[1], `${label} CARRIER`, home, ez, (p) => {
+        p.carG = new THREE.Group();
+        p.group.add(p.carG);
+        const mc = new Merge().add(cyl(8, 8, 1.6, 16), {p: [0, 0, -5.3], r: [Math.PI / 2, 0, 0], c: COL.dark});
+        for (let k = 0; k < 3; k++) {
+          const a = (k * 2 * Math.PI) / 3;
+          mc.add(box(GEAR.pinR - 4, 3, 1.6, 0.4), {p: [Math.cos(a) * (GEAR.pinR / 2 + 2), Math.sin(a) * (GEAR.pinR / 2 + 2), -5.3], r: [0, 0, a], c: COL.dark});
+          mc.add(cyl(2, 2, 14, 10), {p: [Math.cos(a) * GEAR.pinR, Math.sin(a) * GEAR.pinR, 0], r: [Math.PI / 2, 0, 0], c: COL.chrome});
+        }
+        addMesh({mats: p.mats, group: p.carG}, mc.build(), 'metal').userData.part = p;
+      });
+      const sun = sub('sun' + st[1], `${label} SUN ${GEAR.Zs}T`, home, sunEz, (p) => {
+        const ms = new Merge().add(gearGeo(GEAR.Zs, false, 8), {c: COL.steel}).add(cyl(3, 3, 16, 12), {r: [Math.PI / 2, 0, 0], c: COL.chrome});
+        ms.add(annulus(6, 3.4, 1.2), {p: [0, 0, 4.4], c: COL.dark});
+        addMesh(p, ms.build(), 'metal');
+      });
+      const planets = [0, 1, 2].map((k) => {
         const a = (k * 2 * Math.PI) / 3;
-        mc.add(box(GEAR.pinR - 4, 3, 1.6, 0.4), {p: [Math.cos(a) * (GEAR.pinR / 2 + 2), Math.sin(a) * (GEAR.pinR / 2 + 2), -5.3], r: [0, 0, a], c: COL.dark});
-        mc.add(cyl(2, 2, 14, 10), {p: [Math.cos(a) * GEAR.pinR, Math.sin(a) * GEAR.pinR, 0], r: [Math.PI / 2, 0, 0], c: COL.chrome});
-      }
-      addMesh({mats: g.mats, group: carG}, mc.build(), 'metal').userData.part = g;
-      const planets = [];
-      for (let k = 0; k < 3; k++) {
-        const a = (k * 2 * Math.PI) / 3;
-        const pg = new THREE.Group();
-        pg.position.set(Math.cos(a) * GEAR.pinR, Math.sin(a) * GEAR.pinR, 0);
-        carG.add(pg);
-        const mp = new Merge().add(gearGeo(GEAR.Zp, false, 8), {c: k === 0 ? COL.orange : COL.steel}).add(annulus(4, 2.2, 8.4), {c: COL.dark});
-        addMesh({mats: g.mats, group: pg}, mp.build(), 'metal').userData.part = g;
-        planets.push({pg, a: (a * 180) / Math.PI});
-      }
-      D.spin[st] = {sunG, carG, planets};
+        const pp = bit(car.carG, `planet${st[1]}-${k + 1}`, `${label} PLANET ${k + 1}`, [Math.cos(a) * GEAR.pinR, Math.sin(a) * GEAR.pinR, 0], a, 34, (q) => {
+          const mp = new Merge().add(gearGeo(GEAR.Zp, false, 8), {c: k === 0 ? COL.orange : COL.steel}).add(annulus(4, 2.2, 8.4), {c: COL.dark});
+          addMesh(q, mp.build(), 'metal');
+        });
+        pp.group.rotation.z = 0;
+        return {pg: pp.group, a: (a * 180) / Math.PI};
+      });
+      D.spin[st] = {sunG: sun.group, carG: car.carG, planets};
     };
     const ringOf = (g) => {
       const m = new Merge().add(gearGeo(GEAR.Zr, true, 8), {c: COL.steel}).add(annulus(47, 41.5, 3), {p: [0, 0, -2.5], c: COL.graphite});
@@ -330,50 +342,53 @@ function core() {
       addMesh(g, m.build(), 'metal');
     };
     // 1 bearing: outer race fixed, inner race and the cage with balls turn at the output angle; bolt circles on the face plate
-    sub('bearing', 'CROSS-ROLLER BEARING', -11, -112, (p) => {
+    sub('bearing', 'BEARING OUTER RACE', -11, -112, (p) => {
       const outer = new Merge().add(annulus(47, 38.5, 8), {c: COL.steel}).add(annulus(47, 44, 2), {p: [0, 0, -4], c: COL.graphite});
       for (const a of ring(12, 0, (t) => t)) outer.add(cyl(1.4, 1.4, 1.2, 8), {p: [Math.cos(a) * 45.5, Math.sin(a) * 45.5, -5.2], r: [Math.PI / 2, 0, 0], c: COL.chrome});
       outer.add(box(9, 3, 3, 0.5), {p: [0, 47, 0], c: COL.orange});
       addMesh(p, outer.build(), 'metal');
-      const inner = new THREE.Group();
-      p.group.add(inner);
+    });
+    const inner = sub('bearingIn', 'BEARING INNER RACE', -11, -168, (p) => {
+      p.spinG = new THREE.Group();
+      p.group.add(p.spinG);
       const mi = new Merge().add(annulus(36.5, 27, 8), {c: COL.chrome}).add(annulus(38, 33, 1.6), {p: [0, 0, 4.4], c: COL.graphite});
       for (const a of ring(8, 0, (t) => t)) mi.add(cyl(1.5, 1.5, 1.2, 8), {p: [Math.cos(a) * 31, Math.sin(a) * 31, 5.4], r: [Math.PI / 2, 0, 0], c: COL.chrome});
-      addMesh({mats: p.mats, group: inner}, mi.build(), 'metal').userData.part = p;
-      const cage = new THREE.Group();
-      p.group.add(cage);
-      const mb = new Merge();
-      for (const a of ring(24, 0, (t) => t)) mb.add(new THREE.SphereGeometry(2.1, 8, 6), {p: [Math.cos(a) * 37.7, Math.sin(a) * 37.7, 0], c: COL.chrome});
-      mb.add(annulus(39.5, 36, 1.5), {p: [0, 0, 0], c: COL.copper});
-      addMesh({mats: p.mats, group: cage}, mb.build(), 'metal').userData.part = p;
-      D.spin.bearing = {inner, cage};
+      addMesh({mats: p.mats, group: p.spinG}, mi.build(), 'metal').userData.part = p;
     });
+    const cage = sub('cage', 'BEARING CAGE', -11, -140, (p) => {
+      p.spinG = new THREE.Group();
+      p.group.add(p.spinG);
+      addMesh({mats: p.mats, group: p.spinG}, new Merge().add(annulus(39.5, 36, 1.5), {c: COL.copper}).build(), 'metal').userData.part = p;
+    });
+    ring(24, 0, (t) => t).forEach((a, k) => bit(cage.spinG, `ball-${k + 1}`, `BEARING BALL ${k + 1}`, [Math.cos(a) * 37.7, Math.sin(a) * 37.7, 0], a, 16, (q) => solid(q, new Merge().add(new THREE.SphereGeometry(2.1, 8, 6), {c: COL.chrome}))));
+    D.spin.bearing = {inner: inner.spinG, cage: cage.spinG};
     // 2-5 the two planetary stages: ring (housing) separates from its gears
     sub('ring2', 'STAGE 2 RING 72T', 0, -56, (p) => ringOf(p));
-    sub('gears2', 'STAGE 2 GEARS', 0, 0, (p) => planetsOf('s2', p));
-    sub('gears1', 'STAGE 1 GEARS', 12, 56, (p) => planetsOf('s1', p));
+    gearsOf('s2', 'STAGE 2', 0, 0, -28);
+    gearsOf('s1', 'STAGE 1', 12, 56, 84);
     sub('ring1', 'STAGE 1 RING 72T', 12, 112, (p) => ringOf(p));
     // 6 stator with 24 copper coils, 7 rotor with 20 magnets and an encoder disc, 8 shaft collar and circlips
-    sub('stator', 'MOTOR STATOR', 26, 168, (p) => {
+    // 6 stator: housing and 24 copper coils, 7 rotor: 20 magnets round a hub with the encoder disc, 8 collar and circlips
+    const stator = sub('stator', 'MOTOR STATOR', 26, 168, (p) => {
       const m = new Merge().add(annulus(43, 31, 12), {c: COL.graphite});
-      for (const a of ring(24, 0, (t) => t)) m.add(box(5, 4, 11, 0.8), {p: [Math.cos(a) * 28.5, Math.sin(a) * 28.5, 0], r: [0, 0, a], c: COL.copper});
       for (const a of ring(24, 0, (t) => t)) m.add(box(2, 3, 12.4, 0.3), {p: [Math.cos(a) * 43, Math.sin(a) * 43, 0], r: [0, 0, a], c: COL.dark});
       for (const a of ring(8, 0, (t) => t)) m.add(cyl(1.4, 1.4, 1.2, 8), {p: [Math.cos(a) * 37, Math.sin(a) * 37, 6.5], r: [Math.PI / 2, 0, 0], c: COL.chrome});
       addMesh(p, m.build(), 'metal');
     });
-    sub('rotor', 'MOTOR ROTOR + ENCODER', 26, 224, (p) => {
-      const rg = new THREE.Group();
-      p.group.add(rg);
+    ring(24, 0, (t) => t).forEach((a, k) => bit(stator.group, `coil-${k + 1}`, `STATOR COIL ${k + 1}`, [Math.cos(a) * 28.5, Math.sin(a) * 28.5, 0], a, 30, (q) => solid(q, new Merge().add(box(5, 4, 11, 0.8), {c: COL.copper}))));
+    const rotor = sub('rotor', 'MOTOR ROTOR + ENCODER', 26, 224, (p) => {
+      p.spinG = new THREE.Group();
+      p.group.add(p.spinG);
       const m = new Merge().add(annulus(24, 12, 10), {c: COL.dark}).add(cyl(3, 3, 34, 12), {r: [Math.PI / 2, 0, 0], c: COL.chrome});
-      for (const a of ring(20, 0, (t) => t)) m.add(box(4.2, 2.6, 9, 0.4), {p: [Math.cos(a) * 24.5, Math.sin(a) * 24.5, 0], r: [0, 0, a], c: COL.steel});
-      for (const a of ring(20, 0, (t) => t)) if (Math.round((a / (2 * Math.PI)) * 20) % 2) m.add(box(4.2, 2.6, 9.2, 0.4), {p: [Math.cos(a) * 24.5, Math.sin(a) * 24.5, 0], r: [0, 0, a], c: COL.ink});
       // encoder disc: slits and one orange index mark
       m.add(annulus(20, 5, 1), {p: [0, 0, 8.5], c: COL.chrome});
       for (const a of ring(36, 0, (t) => t)) m.add(box(1, 5, 1.3, 0.1), {p: [Math.cos(a) * 16, Math.sin(a) * 16, 8.5], r: [0, 0, a - Math.PI / 2], c: COL.ink});
       m.add(box(2.4, 7, 1.5, 0.2), {p: [0, 17, 8.8], c: COL.orange});
-      addMesh({mats: p.mats, group: rg}, m.build(), 'metal').userData.part = p;
-      D.spin.rotor = rg;
+      addMesh({mats: p.mats, group: p.spinG}, m.build(), 'metal').userData.part = p;
     });
+    // magnets alternate north and south (steel and ink faces)
+    ring(20, 0, (t) => t).forEach((a, k) => bit(rotor.spinG, `magnet-${k + 1}`, `ROTOR MAGNET ${k + 1}`, [Math.cos(a) * 24.5, Math.sin(a) * 24.5, 0], a, 24, (q) => solid(q, new Merge().add(box(4.2, 2.6, 9, 0.4), {c: k % 2 ? COL.ink : COL.steel}))));
+    D.spin.rotor = rotor.spinG;
     sub('collar', 'SHAFT COLLAR + CIRCLIPS', 26, 280, (p) => {
       const cg = new THREE.Group();
       p.group.add(cg);
@@ -435,24 +450,27 @@ export function buildMech() {
   const hull = feet.map((m) => ({node: m.parent, v: m.position.clone()}));
   const DIRS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1], ...[-1, 1].flatMap((a) => [-1, 1].flatMap((b) => [-1, 1].map((c) => [a, b, c])))].map((d) => new V3(...d).normalize());
   const buildHull = () => {
+    // extreme points per joint node over all its armor (not per plate: the floor test runs several times a frame)
     const M = new THREE.Matrix4();
+    const best = new Map();
+    const v = new V3();
     for (const p of parts) {
       if (p.kind !== 'armor' || p.id === 'blade') continue;
       M.compose(p.home, p.group.quaternion, p.group.scale);
+      const b = best.get(p.parent) || best.set(p.parent, DIRS.map(() => ({k: -1e9, v: new V3()}))).get(p.parent);
       for (const o of p.group.children) {
         if (!o.isMesh) continue;
         const pa = o.geometry.attributes.position;
-        for (const d of DIRS) {
-          let best = -1e9;
-          let bi = 0;
-          for (let i = 0; i < pa.count; i++) {
-            const k = pa.getX(i) * d.x + pa.getY(i) * d.y + pa.getZ(i) * d.z;
-            if (k > best) [best, bi] = [k, i];
-          }
-          hull.push({node: p.parent, v: new V3().fromBufferAttribute(pa, bi).applyMatrix4(o.matrix).applyMatrix4(M)});
+        for (let i = 0; i < pa.count; i++) {
+          v.fromBufferAttribute(pa, i).applyMatrix4(o.matrix).applyMatrix4(M);
+          DIRS.forEach((d, j) => {
+            const k = v.dot(d);
+            if (k > b[j].k) b[j].k = k, b[j].v.copy(v);
+          });
         }
       }
     }
+    for (const [node, b] of best) for (const e of b) hull.push({node, v: e.v.clone()});
     flyCache.clear();
   };
   const ready = loadShell(C).then((added) => {
@@ -644,7 +662,8 @@ export function buildMech() {
       l.color.set(sel || hover > 0.5 ? COL.orange : COL.ink);
     }
     p.group.traverse((o) => {
-      if (o.isMesh) o.castShadow = a > 0.5;
+      if (o.userData.part && o.userData.part !== p) return; // a part riding inside this one styles itself
+      if (o.isMesh) o.castShadow = a > 0.5 && !p.bit; // a ball or a coil casts no shadow worth its draw call
       if (o.isMesh || o.isLineSegments) o.visible = o.isLineSegments ? edge > 0.02 : a > 0.01;
     });
   };

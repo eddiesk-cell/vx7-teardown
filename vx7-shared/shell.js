@@ -1,6 +1,6 @@
 // The outer shell: one painted mesh made from the reference turnaround (tools/shell: Hunyuan3D shape + paint, local),
-// cut offline by tools/shell/split.py into one armor piece per body segment, each cut in the dark gap at its joint.
-// Here each piece rides its joint node, flies off on EXPLODE and pulls out on a click like any other part.
+// cut offline by tools/shell/split.py at the joints into one piece per body segment, and each piece along its panel
+// seams into its plates. Here every plate rides its joint node, lifts off its surface on EXPLODE and pulls out on a click.
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import ARMOR from './assets/vx7-armor.glb';
@@ -50,7 +50,7 @@ export function loadShell(C) {
     gltf.scene.traverse((o) => o.isMesh && srcs.push(o));
     const v = new V3();
     return srcs.map((src, j) => {
-      const s = meta[src.name.replace(/^shell-/, '')];
+      const s = meta[src.userData.piece];
       // positions: dequantize to world rest metres, then into the joint node's frame (as floats: they leave [-1, 1])
       const M = s.node.matrixWorld.clone().invert().multiply(src.matrixWorld);
       // normals are stored as world directions (split.py), so they only turn into the node's frame
@@ -60,8 +60,10 @@ export function loadShell(C) {
       const pos = new Float32Array(pa.count * 3);
       const nrm = new Float32Array(pa.count * 3);
       const cen = new V3();
+      const lift = new V3(); // the plate's mean normal: it comes off its surface
       for (let i = 0; i < pa.count; i++) {
         cen.add(v.fromBufferAttribute(pa, i).applyMatrix4(src.matrixWorld));
+        lift.add(v.fromBufferAttribute(na, i));
         v.fromBufferAttribute(pa, i).applyMatrix4(M).toArray(pos, i * 3);
         v.fromBufferAttribute(na, i).applyQuaternion(q).normalize().toArray(nrm, i * 3);
       }
@@ -70,8 +72,10 @@ export function loadShell(C) {
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
       geo.setAttribute('uv', src.geometry.attributes.uv);
-      const dir = new V3(...(s.out || [cen.x * 2.5, Math.max(-0.1, (cen.y - 2.2) * 0.4), 0.35])).normalize(); // never into the floor
-      const p = mkPart(s.node, src.name, s.name, 'armor', {tags: s.tags, out: dir.applyQuaternion(q).toArray(), dist: 0.9 + 0.3 * ((j * 7919) % 97) / 97, stage: 1});
+      const away = new V3(...(s.out || [cen.x * 2.5, Math.max(-0.1, (cen.y - 2.2) * 0.4), 0.35])).normalize();
+      const dir = lift.normalize().add(away.multiplyScalar(0.6)).normalize();
+      dir.y = Math.max(dir.y, -0.15); // never into the floor
+      const p = mkPart(s.node, src.name, `${s.name} · ${src.userData.plate}`, 'armor', {tags: s.tags, out: dir.applyQuaternion(q).toArray(), dist: 0.7 + 0.3 * ((j * 7919) % 97) / 97, stage: 1});
       const m = panelMat(src.material.map);
       p.mats.push({m, base: 1, e0: 0});
       const mesh = new THREE.Mesh(geo, m);

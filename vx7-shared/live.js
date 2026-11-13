@@ -47,7 +47,7 @@ const ISO = {
 };
 const LABELS = [
   ['reactor-core', 'REACTOR CORE', 'ORANGE TORUS · COOLANT LOOPS'], ['drive-neck', 'NECK DRIVE', '49:1 · 2 STAGES'], ['drive-shR', 'R SHOULDER DRIVE', 'SUN 12 · PLANET 30 · RING 72'],
-  ['drive-elR', 'R ELBOW DRIVE', 'FRAMELESS BLDC + PLANETARY'], ['blade', 'PLASMA BLADE', '1.3 M · ORANGE'], ['shell-head', 'HELMET', 'PAINTED SHELL · CLICK TO PULL'], ['shield-spine', 'SHIELD', 'ROTARY DRUM MOUNT'],
+  ['drive-elR', 'R ELBOW DRIVE', 'FRAMELESS BLDC + PLANETARY'], ['blade', 'PLASMA BLADE', '1.3 M · ORANGE'], ['shell-head-1', 'HELMET', 'PAINTED SHELL · CLICK TO PULL'], ['shield-spine', 'SHIELD', 'ROTARY DRUM MOUNT'],
   ['drive-waist', 'WAIST DRIVE', 'SPINE RINGS ABOVE'], ['drive-hipL', 'L HIP DRIVE', '49:1'], ['drive-hipR', 'R HIP DRIVE', '49:1'], ['act-knee-R', 'KNEE ACTUATOR', 'BORE 50 · ROD 28 · STROKE 180 MM'],
   ['act-hock-L', 'HOCK ACTUATOR', 'BORE 50 · ROD 28 · STROKE 180 MM'], ['drive-kneeL', 'L KNEE DRUM', '49:1'],
 ];
@@ -378,6 +378,8 @@ export function runLive({film = null} = {}) {
   // ------------------------------------------------------------ the frame
   const perf = {n: 0, sum: 0, slow: 0, age: 0};
   const tgtA = (p) => {
+    // the small parts inside a drive (balls, coils, magnets, planets) are drawn only once the drive is opened up
+    if (p.bit && S.k < 0.2 && dispE.xray < 0.01 && !(S.iso && S.isoE > 0) && p.module.pull < 0.01) return [0, 0];
     const iso = S.iso && S.isoE > 0 ? ISO[S.iso] : null;
     if (iso) {
       const inG = iso.sel(p);
@@ -406,6 +408,8 @@ export function runLive({film = null} = {}) {
       const [ta, te] = tgtA(p);
       p.da = p.da === undefined || snap ? ta : p.da + (ta - p.da) * e(0.18);
       p.de = p.de === undefined || snap ? te : p.de + (te - p.de) * e(0.18);
+      // a shut drive's small parts leave the scene graph, so nothing walks or draws them
+      if (p.bit && p.da > 0.005 !== !!p.group.parent) p.da > 0.005 ? p.parent.add(p.group) : p.parent.remove(p.group);
       const tgt = p === S.hoverPart || (S.hoverPart && p.module && p.module === S.hoverPart.module) ? 1 : 0;
       p.hv = (p.hv ?? 0) + (tgt - (p.hv ?? 0)) * e(0.1);
       const pulled = (p.module || p).pullT > 0.5;

@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import MOLD from './assets/vx7-mold.json';
+import {claws} from './claws.js';
 
 const V3 = THREE.Vector3;
 const GAP = 0; // m: plates meet edge to edge; a seam only shows once one comes off
@@ -32,11 +33,9 @@ function segments(N) {
     Object.assign(S, {
       ['upper' + s]: {node: N['sh' + s], tags: [...arm, 'shoulder', 'shoulder' + s], name: s + ' SHOULDER', bands: 4, secs: 6},
       ['fore' + s]: {node: N['el' + s], tags: arm, name: s + ' FOREARM', bands: 4, secs: 6},
-      ['hand' + s]: {node: N['wrist' + s], tags: arm, name: s === 'L' ? 'L CLAW HAND' : 'R GAUNTLET', bands: 2, secs: 4},
       ['thigh' + s]: {node: N['thigh' + s], tags: [...leg, 'hip'], name: s + ' THIGH', bands: 5, secs: 6},
       ['shin' + s]: {node: N['knee' + s], tags: [...leg, 'knee'], name: s + ' SHIN', bands: 5, secs: 6},
       ['meta' + s]: {node: N['hock' + s], tags: [...leg, 'foot'], name: s + ' ANKLE', bands: 3, secs: 4},
-      ['foot' + s]: {node: N['foot' + s], tags: [...leg, 'foot'], name: s + ' CLAW FOOT', bands: 2, secs: 4},
     });
   }
   return S;
@@ -354,7 +353,7 @@ function lookOf(id, bi, bands, face, lum) {
   if (base === 'torso') return {mech: bi === 0 || bi === bands - 1 || (face.z < 0.2 && dark), trim: face.z > 0.2 && bi === 1};
   if (base === 'pelvis') return {mech: face.z < 0.3, trim: false};
   if (base === 'head') return {mech: bi === 0, trim: false};
-  return {mech: true, trim: false}; // hands and feet
+  return {mech: true, trim: false};
 }
 // a plate's name from the way it faces
 const SIDE = (n, id) => {
@@ -391,6 +390,7 @@ function build(C, tex) {
   const v = new V3();
   let k = 0;
   for (const seg of MOLD.segments) {
+    if (/^(hand|foot)/.test(seg.id)) continue; // hands and feet are built as claws (claws.js)
     const s = meta[seg.id];
     const g = fillMould({...seg, T0: seg.t0, AW: MOLD.atlas.w, AH: MOLD.atlas.h, r: new Uint16Array(bytes(seg.r).buffer), c: bytes(seg.c)});
     g.r = smoothR(g.r, g.nt, g.nth);
@@ -604,5 +604,6 @@ function build(C, tex) {
     pickables.push(mesh);
     added.push(b);
   }
+  added.push(...claws(C));
   return added;
 }

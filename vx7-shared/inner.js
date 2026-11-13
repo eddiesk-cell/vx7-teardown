@@ -160,7 +160,7 @@ export function addInner(C) {
     const BR = 168 * D2R;
     const em = mkPart(N.wristR, 'blade-emitter', 'BLADE EMITTER HOUSING', 'frame', {tags: T, pos: [0, -0.12, 0.05], out: [-0.3, -0.8, 0.5], dist: 0.55, stage: 2});
     em.group.rotation.x = BR;
-    solid(em, new Merge().add(cyl(0.05, 0.05, 0.18, 14), {p: [0, 0.09, 0], c: G}).add(cyl(0.058, 0.058, 0.022, 14), {p: [0, 0.18, 0], c: COL.orange}).add(cyl(0.058, 0.058, 0.022, 14), {p: [0, 0.03, 0], c: COL.steel}));
+    solid(em, new Merge().add(cyl(0.066, 0.066, 0.18, 16), {p: [0, 0.09, 0], c: G}).add(cyl(0.074, 0.074, 0.022, 16), {p: [0, 0.18, 0], c: COL.orange}).add(cyl(0.074, 0.074, 0.022, 16), {p: [0, 0.03, 0], c: COL.steel}));
     const bp = mkPart(N.wristR, 'blade', 'PLASMA BLADE', 'armor', {tags: T, pos: [0, -0.12, 0.05], out: [-0.4, -0.6, 0.7], dist: 0.9, stage: 1});
     bp.keep = true;
     bp.group.rotation.x = BR;

@@ -29,14 +29,16 @@ and shoot; then pull the armor off plate by plate and watch the motors and plane
   adds the rest: an engraved groove round every plate and an inset line inside it, one detail per plate (a vent, a dark
   hatch, an orange tab, a split line, hazard chevrons or a stencil mark), a dark 22 mm edge, light lines along the outer
   limbs and the chest, a glowing V visor, two swept fins, domed caps on the helmet and shoulders, and a window for the
-  reactor. Plates at rest draw as one merged piece per joint and split back into
+  reactor. Hands and feet are built as claws (`vx7-shared/claws.js`): a talon hand on the left, a gauntlet fist closed
+  round the blade emitter on the right, and on each foot three toes and a heel spur standing on their talon tips, every
+  joint and plate a part of its own. Plates at rest draw as one merged piece per joint and split back into
   parts the moment one moves.
 - **Inside: built from code** (`vx7-shared/inner.js`, `mech.js`): graphite frame, spine, cables, the chest reactor, knee /
   hock / elbow hydraulics (bore 50, rod 28, stroke 180 mm, rod length from the law of cosines), the shield and the plasma blade.
 - **10 planetary drives** (neck, waist, shoulders, elbows, hips, knees), each **87 separate parts**: frameless BLDC motor
   (stator with 24 copper coils, rotor with 20 magnets and the encoder disc), two planetary stages (sun 12T, carrier,
   3 planets 30T, ring 72T, 7:1 each, **49:1** total), cross-roller bearing (outer race, inner race, cage, 24 balls),
-  collar and circlips. 100 toothed gears mesh and turn from the joint angle. **1,279 parts** in all; a drive's small parts
+  collar and circlips. 100 toothed gears mesh and turn from the joint angle. **1,319 parts** in all; a drive's small parts
   join the scene only once it is opened, so the walking page draws about as much as before.
 - **Joints** sit on centres measured on the shell (`REST` in `vx7-shared/kin.js`); every pose, gear angle, torque, rpm and the
   reactor kW readout is a function of `(sequence, tau)` there.

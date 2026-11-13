@@ -43,7 +43,7 @@ const ISO = {
   'BLADE ARM': {sel: (p) => p.tags.includes('blade'), focus: 'drive-elR', d: 4.6, armorSolid: true, drive: 'elR'},
   HIP: {sel: (p) => p.tags.includes('hip') && !p.tags.includes('legR'), focus: 'drive-hipL', d: 3.4, drive: 'hipL'},
   KNEE: {sel: (p) => p.tags.includes('knee') && p.tags.includes('legL'), focus: 'drive-kneeL', d: 3.0, drive: 'kneeL'},
-  FOOT: {sel: (p) => p.tags.includes('foot') && p.tags.includes('legL'), focus: 'act-hock-L', d: 2.6, drive: 'kneeL'},
+  FOOT: {sel: (p) => p.tags.includes('foot') && p.tags.includes('legL'), focus: 'foot-base-L', d: 2.2, drive: 'kneeL'},
 };
 const LABELS = [
   ['reactor-core', 'REACTOR CORE', 'ORANGE TORUS · COOLANT LOOPS'], ['drive-neck', 'NECK DRIVE', '49:1 · 2 STAGES'], ['drive-shR', 'R SHOULDER DRIVE', 'SUN 12 · PLANET 30 · RING 72'],

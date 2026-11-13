@@ -292,7 +292,67 @@ for g, pc in zip(S, pieces):
                  'r': base64.b64encode(np.round(r * 1000).astype(np.uint16).tobytes()).decode(),
                  'c': base64.b64encode(px.astype(np.uint8).tobytes()).decode()})
     print(f"{g['id']:8s} {nt:3d} x {NTH} samples, {int((r > 0).mean() * 100)}% hit, r {r[r > 0].min():.2f}-{r.max():.2f} m")
-txt = json.dumps({'segments': mold}, separators=(',', ':'))
-assert not re.search(r'AIza[0-9A-Za-z_-]{35}', txt), 'a run of the mould reads like an API key'
+# ---- 6. the paint, unrolled: for each segment the painted shell is rendered round its bone into a flat image (angle
+# across, height down; 0.625 degrees and 2.5 mm a pixel), keeping the outermost surface, so the code plates can wear the
+# design's paint with no atlas seams. The angle runs from -90 to 450 degrees, so a plate across the front never wraps.
+TH0, TH1, PXA, PXT = -np.pi / 2, 2.5 * np.pi, np.radians(0.625), 0.0025
+def unroll(g, pc, m):
+    u, f, l = frame_of(g)
+    H = (m['nt'] - 1) * DT
+    W_, H_ = int(round((TH1 - TH0) / PXA)), int(round(H / PXT)) + 1
+    depth = np.full((H_, W_), -1.0); UVI = np.zeros((H_, W_, 2))
+    X = pc[:, :3].reshape(-1, 3, 3); UVt = pc[:, 3:5].reshape(-1, 3, 2)
+    d = X - g['a']; tt = d @ u; rv = d - tt[..., None] * u
+    th = np.arctan2(rv @ l, rv @ f); rad = np.linalg.norm(rv, axis=2)
+    wrap = th.max(1) - th.min(1) > np.pi
+    th = np.where(wrap[:, None] & (th < 0), th + 2 * np.pi, th)
+    py_all = (tt - m['t0']) / PXT
+    yy, xx = np.mgrid[0:H_, 0:W_]
+    for k in range(len(X)):
+        for off in (-2 * np.pi, 0, 2 * np.pi):
+            px = (th[k] + off - TH0) / PXA; py = py_all[k]
+            x0, x1 = int(np.floor(px.min())), int(np.ceil(px.max())); y0, y1 = int(np.floor(py.min())), int(np.ceil(py.max()))
+            if x1 < 0 or x0 >= W_ or y1 < 0 or y0 >= H_: continue
+            x0, x1, y0, y1 = max(x0, 0), min(x1, W_ - 1), max(y0, 0), min(y1, H_ - 1)
+            gx = xx[y0:y1 + 1, x0:x1 + 1] + 0.5; gy = yy[y0:y1 + 1, x0:x1 + 1] + 0.5
+            (ax_, ay_), (bx_, by_), (cx_, cy_) = zip(px, py)
+            den = (by_ - cy_) * (ax_ - cx_) + (cx_ - bx_) * (ay_ - cy_)
+            if abs(den) < 1e-12: continue
+            w0 = ((by_ - cy_) * (gx - cx_) + (cx_ - bx_) * (gy - cy_)) / den
+            w1 = ((cy_ - ay_) * (gx - cx_) + (ax_ - cx_) * (gy - cy_)) / den
+            w2 = 1 - w0 - w1
+            ins = (w0 >= -1e-6) & (w1 >= -1e-6) & (w2 >= -1e-6)
+            if not ins.any(): continue
+            z = w0 * rad[k, 0] + w1 * rad[k, 1] + w2 * rad[k, 2]
+            sub = depth[y0:y1 + 1, x0:x1 + 1]
+            win = ins & (z > sub)
+            sub[win] = z[win]
+            uvs = UVI[y0:y1 + 1, x0:x1 + 1]
+            for q in range(2): uvs[..., q][win] = (w0 * UVt[k, 0, q] + w1 * UVt[k, 1, q] + w2 * UVt[k, 2, q])[win]
+    have = depth > 0
+    img = RGB[np.clip((UVI[..., 1] * RGB.shape[0]).astype(int), 0, RGB.shape[0] - 1), np.clip((UVI[..., 0] * RGB.shape[1]).astype(int), 0, RGB.shape[1] - 1)].copy()
+    img[~have] = 0
+    # what the shell does not cover (past a joint cut, an arm opening) takes the paint round it
+    img = cv2.inpaint(np.ascontiguousarray(img[..., ::-1]), (~have).astype(np.uint8) * 255, 6, cv2.INPAINT_TELEA)[..., ::-1]
+    return img
+import cv2
+tiles = [unroll(g, pc, m) for g, pc, m in zip(S, pieces, mold)]
+# pack the tiles into columns of one atlas, shortest column first
+NCOL = 3
+colh = [0] * NCOL; place = []
+for k in sorted(range(len(tiles)), key=lambda k: -tiles[k].shape[0]):
+    c_ = int(np.argmin(colh)); place.append((k, c_ * tiles[k].shape[1], colh[c_])); colh[c_] += tiles[k].shape[0]
+AW, AH = NCOL * tiles[0].shape[1], max(colh)
+atlas = np.zeros((AH, AW, 3), np.uint8)
+for k, x, y in place:
+    h_, w_ = tiles[k].shape[:2]; atlas[y:y + h_, x:x + w_] = tiles[k]
+    mold[k]['tex'] = {'x': x, 'y': y, 'w': w_, 'h': h_, 'th0': TH0, 'th1': TH1, 'pxt': PXT}
+for q in (88, 87, 86, 85, 84):
+    ok_, jpg = cv2.imencode('.jpg', np.ascontiguousarray(atlas[..., ::-1]), [cv2.IMWRITE_JPEG_QUALITY, q])
+    txt = json.dumps({'atlas': {'w': AW, 'h': AH, 'jpg': base64.b64encode(jpg.tobytes()).decode()}, 'segments': mold}, separators=(',', ':'))
+    if not re.search(r'AIza[0-9A-Za-z_-]{35}', txt): break
+else: sys.exit('every JPEG quality still reads like an API key')
+cv2.imwrite(OUT.replace('.json', '-paint.jpg'), np.ascontiguousarray(atlas[..., ::-1]))
+print(f'paint atlas {AW} x {AH}, jpeg {len(jpg)} bytes (quality {q})')
 open(OUT, 'w').write(txt)
 print('wrote', OUT, len(txt), 'bytes')

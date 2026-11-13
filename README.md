@@ -19,17 +19,20 @@ and shoot; then pull the armor off plate by plate and watch the motors and plane
   through Hunyuan3D-2mini (shape) and Hunyuan3D paint, run locally with MLX, into a painted shell
   (`vx7-shared/assets/vx7-shell.glb`). The page never draws that mesh: `tools/shell/split.py` cuts it at the joints
   into 17 body segments and measures each round its bone (radius and paint colour every 1 cm and 2.5 degrees) into
-  `vx7-shared/assets/vx7-mold.json`. `vx7-shared/shell.js` builds **about 340 armor plates** from that mould: curved
-  panels on straight panel lines (bands across the bone, sectors round it, each nudged to a painted seam), a 6 mm
-  groove, a chamfered rim, a dark 12 mm edge, bolts at the corners, every other plate standing proud for layers, and
-  a finish from the paint under it (white, steel or graphite, orange trim). The chest leaves a bolted window for the
-  reactor. Plates at rest draw as one merged piece per joint and split back into parts the moment one moves.
+  `vx7-shared/assets/vx7-mold.json`. `vx7-shared/shell.js` builds **about 340 armor plates** from that mould:
+  curved panels on panel lines (bands across the bone, sectors round it, each nudged to a painted seam) that meet edge
+  to edge with shared normals, so the assembled armor reads as one smooth shell and a seam shows only when a plate
+  comes off. The plates wear the design's paint: `split.py` also unrolls the painted shell round each bone into one
+  atlas (0.625 degrees x 2.5 mm a pixel), so there are no texture seams. Code adds the rest: a dark 12 mm edge on every
+  plate, light lines along the outer limbs and the chest, a glowing V visor, two swept fins, domed caps on the helmet
+  and shoulders, and a window for the reactor. Plates at rest draw as one merged piece per joint and split back into
+  parts the moment one moves.
 - **Inside: built from code** (`vx7-shared/inner.js`, `mech.js`): graphite frame, spine, cables, the chest reactor, knee /
   hock / elbow hydraulics (bore 50, rod 28, stroke 180 mm, rod length from the law of cosines), the shield and the plasma blade.
 - **10 planetary drives** (neck, waist, shoulders, elbows, hips, knees), each **87 separate parts**: frameless BLDC motor
   (stator with 24 copper coils, rotor with 20 magnets and the encoder disc), two planetary stages (sun 12T, carrier,
   3 planets 30T, ring 72T, 7:1 each, **49:1** total), cross-roller bearing (outer race, inner race, cage, 24 balls),
-  collar and circlips. 100 toothed gears mesh and turn from the joint angle. **1,273 parts** in all; a drive's small parts
+  collar and circlips. 100 toothed gears mesh and turn from the joint angle. **1,279 parts** in all; a drive's small parts
   join the scene only once it is opened, so the walking page draws about as much as before.
 - **Joints** sit on centres measured on the shell (`REST` in `vx7-shared/kin.js`); every pose, gear angle, torque, rpm and the
   reactor kW readout is a function of `(sequence, tau)` there.

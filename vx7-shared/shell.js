@@ -1,19 +1,21 @@
 // The armor, built in code. tools/shell/split.py measures the painted shell made from the reference (Hunyuan3D shape
 // + paint, local) into a mould: for each body segment, its radius and paint colour round the bone on a 1 cm x 2.5 deg
 // grid. Here every plate is generated from that mould: a curved panel of its own, cut on straight panel lines (bands
-// across the bone, sectors round it), with a groove to its neighbours, a chamfered rim and a dark edge for its
-// thickness. Each plate rides its joint node, lifts off its surface on EXPLODE and pulls out on a click.
+// across the bone, sectors round it), meeting its neighbours on a hairline seam, with a soft rim, a dark edge for its
+// thickness and light lines where the design has orange. The head gets a lit visor and fins. Each plate rides its
+// joint node, lifts off its surface on EXPLODE and pulls out on a click.
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import MOLD from './assets/vx7-mold.json';
 
 const V3 = THREE.Vector3;
-const GAP = 0.006; // m: the panel groove
+const GAP = 0; // m: plates meet edge to edge; a seam only shows once one comes off
 const THICK = 0.012; // m: plate thickness
-const CHAMFER = 0.003; // m: the rim drops this much
+const CHAMFER = 0; // m: no rim, so the assembled armor reads as one smooth shell
+const LIFT = 0.01; // m: the shell sits this far out from the mould, so no inner part pokes through it
 const SMOOTH = 4; // blur passes over the mould (each about 1 cm along the bone and 2.5 degrees round it)
 const DARK = [0.09, 0.095, 0.105];
-const FIN = {white: [0.86, 0.865, 0.85], steel: [0.5, 0.52, 0.55], graphite: [0.17, 0.18, 0.2], orange: [0.95, 0.47, 0.12], bolt: [0.62, 0.63, 0.65]};
+const FIN = {white: [0.86, 0.865, 0.85], steel: [0.5, 0.52, 0.55], graphite: [0.17, 0.18, 0.2], orange: [0.95, 0.47, 0.12]};
 
 // segment -> joint node, isolate tags, name, plate layout (bands along the bone, sectors round it), explode bias
 function segments(N) {
@@ -131,18 +133,22 @@ function smoothR(r, nt, nth) {
   return Uint16Array.from(cur, (x) => Math.round(x));
 }
 // a material per plate (so each can ghost on its own); a back face reads as the dark inside of a hollow plate
-const plateMat = () => {
-  const m = new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.55, metalness: 0.1, envMapIntensity: 0.55, side: THREE.DoubleSide, shadowSide: THREE.BackSide, transparent: true});
+const plateMat = (map = null) => {
+  const m = new THREE.MeshStandardMaterial({map, vertexColors: true, roughness: 0.55, metalness: 0.1, envMapIntensity: 0.55, side: THREE.DoubleSide, shadowSide: THREE.BackSide, transparent: true});
   m.onBeforeCompile = (sh) => {
-    sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n\tif (!gl_FrontFacing) diffuseColor.rgb = vec3(0.09, 0.095, 0.105);');
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float glow;\nvarying float vGlow;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = glow;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vGlow;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\n\tif (!gl_FrontFacing) diffuseColor.rgb = vec3(0.09, 0.095, 0.105);')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * vGlow * 1.8;');
   };
-  m.customProgramCacheKey = () => 'vx7-plate';
+  m.customProgramCacheKey = () => (map ? 'vx7-plate-paint' : 'vx7-plate');
   return m;
 };
 
 // one plate: rows i0..i1 along the bone, columns j0..j1 round it (wrapping), from the mould grid g
-function plateGeo(g, i0, i1, j0, j1, {lift = 0, hole = null} = {}) {
-  const {a, u, f, l, t0, dt, nt, nth, r, c} = g;
+function plateGeo(g, i0, i1, j0, j1, look, {lift = LIFT, hole = null} = {}) {
+  const {a, u, f, l, t0, dt, nt, nth, r} = g;
   const nr = i1 - i0 + 1;
   const nc = j1 - j0 + 1;
   const P = (t, th, rad) => [a[0] + t * u[0] + rad * (Math.cos(th) * f[0] + Math.sin(th) * l[0]), a[1] + t * u[1] + rad * (Math.cos(th) * f[1] + Math.sin(th) * l[1]), a[2] + t * u[2] + rad * (Math.cos(th) * f[2] + Math.sin(th) * l[2])];
@@ -165,9 +171,15 @@ function plateGeo(g, i0, i1, j0, j1, {lift = 0, hole = null} = {}) {
   const quad = (qi, qj) => ok(i0 + qi, j0 + qj) && ok(i0 + qi + 1, j0 + qj) && ok(i0 + qi, j0 + qj + 1) && ok(i0 + qi + 1, j0 + qj + 1) && outside(i0 + qi + 0.5, j0 + qj + 0.5);
   const pos = [];
   const col = [];
+  const glow = [];
+  const uvs = [];
   const idx = [];
+  // where a point (height t, angle th) falls in the paint atlas
+  const T = g.tex;
+  const UV = (t, th) => [(T.x + ((th - T.th0) / (T.th1 - T.th0)) * T.w) / g.AW, (T.y + (t - g.T0) / T.pxt + 0.5) / g.AH];
   // outer surface: border rows and columns step in by half the groove and drop by the chamfer
   const vid = new Int32Array(nr * nc).fill(-1);
+  const outerAt = []; // [vertex, row, column] of the outer surface, for its normals
   let finish;
   let trim;
   const at = (qi, qj) => {
@@ -180,31 +192,19 @@ function plateGeo(g, i0, i1, j0, j1, {lift = 0, hole = null} = {}) {
     const t = t0 + i * dt + (qi === 0 ? GAP / 2 : qi === nr - 1 ? -GAP / 2 : 0);
     const th = (j * 2 * Math.PI) / nth + (qj === 0 ? GAP / 2 / rad : qj === nc - 1 ? -GAP / 2 / rad : 0);
     pos.push(...P(t, th, rad + lift - (edge ? CHAMFER : 0)));
-    col.push(...(trim && (qi === 2 || qi === 3) && qj > 1 && qj < nc - 2 ? FIN.orange : finish));
+    const lit = trim && qi === 2 && qj > 1 && qj < nc - 2; // a light line just inside the plate's top edge
+    col.push(...(lit ? FIN.orange : finish));
+    glow.push(lit ? 1 : 0);
+    uvs.push(...UV(t, th));
     vid[k] = pos.length / 3 - 1;
+    outerAt.push([vid[k], i, j]);
     return vid[k];
   };
   const on = [];
   for (let qi = 0; qi < nr - 1; qi++) for (let qj = 0; qj < nc - 1; qj++) if (quad(qi, qj)) on.push([qi, qj]);
   if (on.length < 6) return null;
-  // the plate's finish from the paint under it: white, steel or graphite, and an orange trim along its top edge when
-  // the paint there carries orange
-  let lum = 0;
-  let orange = 0;
-  let n = 0;
-  for (let i = i0; i <= i1; i++) {
-    for (let j = j0; j <= j1; j++) {
-      if (!ok(i, j)) continue;
-      const ci = (i * nth + (((j % nth) + nth) % nth)) * 3;
-      const [R_, G_, B_] = [c[ci] / 255, c[ci + 1] / 255, c[ci + 2] / 255];
-      lum += 0.3 * R_ + 0.59 * G_ + 0.11 * B_;
-      orange += R_ > 0.55 && G_ > 0.2 && G_ < 0.62 && B_ < 0.3 && R_ - B_ > 0.35 ? 1 : 0;
-      n++;
-    }
-  }
-  lum /= n;
-  finish = lum > 0.47 ? FIN.white : lum > 0.33 ? FIN.steel : FIN.graphite;
-  trim = orange / n > 0.06 && finish !== FIN.graphite;
+  finish = [1, 1, 1]; // the paint shows as it is
+  trim = look.trim;
   const has = new Set(on.map(([qi, qj]) => qi * nc + qj));
   for (const [qi, qj] of on) {
     const A = at(qi, qj);
@@ -223,6 +223,8 @@ function plateGeo(g, i0, i1, j0, j1, {lift = 0, hole = null} = {}) {
       const inward = ax.sub(x).normalize().multiplyScalar(THICK);
       pos.push(x.x, x.y, x.z, x.x + inward.x, x.y + inward.y, x.z + inward.z);
       col.push(...DARK, ...DARK);
+      glow.push(0, 0);
+      uvs.push(uvs[v * 2], uvs[v * 2 + 1], uvs[v * 2], uvs[v * 2 + 1]);
     }
     idx.push(n0, n0 + 3, n0 + 1, n0, n0 + 2, n0 + 3);
   };
@@ -232,30 +234,51 @@ function plateGeo(g, i0, i1, j0, j1, {lift = 0, hole = null} = {}) {
     if (qj === 0 || !has.has(qi * nc + qj - 1)) wall(at(qi, qj), at(qi + 1, qj));
     if (qj === nc - 2 || !has.has(qi * nc + qj + 1)) wall(at(qi + 1, qj + 1), at(qi, qj + 1));
   }
-  // four bolts near the corners of a plate big enough to carry them
-  const bolt = (qi, qj) => {
-    const k = vid[qi * nc + qj];
-    if (k < 0 || !has.has(qi * nc + qj)) return;
-    const x = new V3(pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]);
-    const ax = new V3(...a).addScaledVector(new V3(...u), x.clone().sub(new V3(...a)).dot(new V3(...u)));
-    const out = x.clone().sub(ax).normalize();
-    const cg = new THREE.CylinderGeometry(0.0065, 0.0065, 0.006, 8).toNonIndexed();
-    cg.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), out));
-    cg.translate(x.x + out.x * 0.002, x.y + out.y * 0.002, x.z + out.z * 0.002);
-    const n0 = pos.length / 3;
-    const bp = cg.attributes.position.array;
-    for (let i = 0; i < bp.length; i += 3) pos.push(bp[i], bp[i + 1], bp[i + 2]), col.push(...FIN.bolt);
-    for (let i = 0; i < bp.length / 3; i++) idx.push(n0 + i);
-  };
-  if (nr > 7 && nc > 7) for (const [qi, qj] of [[2, 2], [2, nc - 3], [nr - 3, 2], [nr - 3, nc - 3]]) bolt(qi, qj);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.setAttribute('glow', new THREE.Float32BufferAttribute(glow, 1));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(idx);
   geo.computeVertexNormals();
+  // the outer surface takes its normal from the whole mould, not from this plate alone, so two plates that meet
+  // shade the same on both sides of the seam and the assembled armor shows no line
+  const nrm = geo.attributes.normal;
+  const cross = new V3();
+  for (const [v, i, j] of outerAt) {
+    const th = (j * 2 * Math.PI) / nth;
+    const ip = Math.min(i + 1, nt - 1);
+    const im = Math.max(i - 1, 0);
+    const dT = new V3(...P(t0 + ip * dt, th, R(ip, j))).sub(new V3(...P(t0 + im * dt, th, R(im, j))));
+    const dTh = new V3(...P(t0 + i * dt, th + (2 * Math.PI) / nth, R(i, j + 1))).sub(new V3(...P(t0 + i * dt, th - (2 * Math.PI) / nth, R(i, j - 1))));
+    cross.crossVectors(dTh, dT).normalize();
+    const out = new V3(nrm.getX(v), nrm.getY(v), nrm.getZ(v));
+    if (cross.dot(out) < 0) cross.negate();
+    nrm.setXYZ(v, cross.x, cross.y, cross.z);
+  }
   return geo;
 }
 
+// the colour scheme, by where a plate sits (the same on both sides): white armor, steel collars at the joints and on
+// the sides that face the body, graphite at the neck, and a light line along the outer side of each limb
+function finishOf(id, bi, bands, face) {
+  const base = id.replace(/[LR]$/, '');
+  const sx = id.endsWith('R') ? -1 : 1;
+  const inward = sx * face.x < -0.45;
+  const outward = sx * face.x > 0.45;
+  if (['upper', 'fore', 'thigh', 'shin', 'meta'].includes(base)) {
+    const collar = bi === 0 || bi === bands - 1;
+    return {finish: collar || inward ? FIN.steel : FIN.white, trim: !collar && outward && bi === 1};
+  }
+  if (base === 'torso') {
+    if (bi === bands - 1) return {finish: FIN.graphite, trim: false};
+    if (bi === 0) return {finish: FIN.steel, trim: false};
+    return {finish: face.z > 0.2 ? FIN.white : FIN.steel, trim: face.z > 0.2 && bi === 1};
+  }
+  if (base === 'pelvis') return {finish: face.z > 0.3 ? FIN.white : FIN.steel, trim: false};
+  if (base === 'head') return {finish: bi === 0 ? FIN.graphite : FIN.white, trim: false};
+  return {finish: FIN.steel, trim: false}; // hands and feet
+}
 // a plate's name from the way it faces
 const SIDE = (n, id) => {
   const sx = id.endsWith('R') ? -1 : 1;
@@ -264,6 +287,23 @@ const SIDE = (n, id) => {
 };
 
 export function loadShell(C) {
+  // the paint atlas decodes first; every plate then wears it
+  return new Promise((ok, fail) => {
+    const img = new Image();
+    img.onload = () => ok(img);
+    img.onerror = fail;
+    img.src = 'data:image/jpeg;base64,' + MOLD.atlas.jpg;
+  }).then((img) => {
+    const tex = new THREE.Texture(img);
+    tex.flipY = false;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    tex.needsUpdate = true;
+    return build(C, tex);
+  });
+}
+
+function build(C, tex) {
   const {N, mkPart, pickables} = C;
   const meta = segments(N);
   // the chest plates leave a round window over the reactor, so its glow shows through the armor
@@ -275,7 +315,7 @@ export function loadShell(C) {
   let k = 0;
   for (const seg of MOLD.segments) {
     const s = meta[seg.id];
-    const g = fillMould({...seg, r: new Uint16Array(bytes(seg.r).buffer), c: bytes(seg.c)});
+    const g = fillMould({...seg, T0: seg.t0, AW: MOLD.atlas.w, AH: MOLD.atlas.h, r: new Uint16Array(bytes(seg.r).buffer), c: bytes(seg.c)});
     g.r = smoothR(g.r, g.nt, g.nth);
     const L = (i, j) => {
       const ci = (i * g.nth + j) * 3;
@@ -313,8 +353,9 @@ export function loadShell(C) {
     const cols = (k2) => cb[k2];
     for (let bi = 0; bi < s.bands; bi++) {
       for (let si = 0; si < s.secs; si++) {
-        // every other plate stands a little proud of its neighbours, so the armor reads in layers
-        const geo = plateGeo(g, rows(bi), rows(bi + 1), cols(si), cols(si + 1), {lift: (bi + si) % 2 ? 0.006 : 0, hole: seg.id === 'torso' ? reactor : null});
+        const th = (((cols(si) + cols(si + 1)) / 2) * 2 * Math.PI) / g.nth;
+        const face = new V3(...g.f).multiplyScalar(Math.cos(th)).addScaledVector(new V3(...g.l), Math.sin(th));
+        const geo = plateGeo(g, rows(bi), rows(bi + 1), cols(si), cols(si + 1), finishOf(seg.id, bi, s.bands, face), {hole: seg.id === 'torso' ? reactor : null});
         if (!geo) continue;
         // world rest positions -> the joint node's frame
         geo.applyMatrix4(inv);
@@ -330,7 +371,7 @@ export function loadShell(C) {
         dir.y = Math.max(dir.y, -0.15); // never into the floor
         const band = s.bands > 1 ? ` ${bi + 1}` : '';
         const p = mkPart(s.node, `shell-${seg.id}-${bi + 1}-${si + 1}`, `${s.name} ${side} PLATE${band}`, 'armor', {tags: s.tags, out: dir.applyQuaternion(q).toArray(), dist: 0.38 + 0.2 * ((k++ * 7919) % 97) / 97, stage: 1});
-        const m = plateMat();
+        const m = plateMat(tex);
         p.mats.push({m, base: 1, e0: 0});
         const mesh = new THREE.Mesh(geo, m);
         mesh.castShadow = mesh.receiveShadow = true;
@@ -347,11 +388,120 @@ export function loadShell(C) {
   for (const p of added) (byNode.get(p.parent) || byNode.set(p.parent, []).get(p.parent)).push(p);
   for (const [node, plates] of byNode) {
     const geos = plates.map((p) => p.group.children[0].geometry);
-    const mesh = new THREE.Mesh(mergeGeometries(geos), plateMat());
+    const mesh = new THREE.Mesh(mergeGeometries(geos), plateMat(tex));
     mesh.castShadow = mesh.receiveShadow = true;
     node.add(mesh);
     const proxy = {mesh, plates};
     for (const p of plates) p.proxy = proxy;
+  }
+  // domed caps where the mould stops short of a closed end: the crown of the helmet and the tops of the shoulders
+  for (const [id, end, name] of [['head', 1, 'HELMET CROWN'], ['upperL', 0, 'L SHOULDER CAP'], ['upperR', 0, 'R SHOULDER CAP']]) {
+    const seg = MOLD.segments.find((x) => x.id === id);
+    const g = fillMould({...seg, r: new Uint16Array(bytes(seg.r).buffer), c: bytes(seg.c)});
+    g.r = smoothR(g.r, g.nt, g.nth);
+    const [A, U, F, L] = [g.a, g.u, g.f, g.l].map((x) => new V3(...x));
+    const row = end ? g.nt - 1 : 0;
+    const t = g.t0 + row * g.dt;
+    const sgn = end ? 1 : -1; // the dome rises past the row, away from the body of the segment
+    let mean = 0;
+    for (let j = 0; j < g.nth; j++) mean += g.r[row * g.nth + j] / 1000 / g.nth;
+    const s = meta[id];
+    const inv = s.node.matrixWorld.clone().invert();
+    const K = 6;
+    const pos = [];
+    const idx = [];
+    for (let k = 0; k <= K; k++) {
+      const ph = (k / K) * (Math.PI / 2);
+      for (let j = 0; j < g.nth; j += 2) {
+        const th = (j * 2 * Math.PI) / g.nth;
+        const rad = (g.r[row * g.nth + j] / 1000 + LIFT) * Math.cos(ph);
+        const d = F.clone().multiplyScalar(Math.cos(th)).addScaledVector(L, Math.sin(th));
+        pos.push(...A.clone().addScaledVector(U, t + sgn * 0.45 * mean * Math.sin(ph)).addScaledVector(d, rad).applyMatrix4(inv).toArray());
+      }
+    }
+    const nr = g.nth / 2;
+    for (let k = 0; k < K; k++) for (let j = 0; j < nr; j++) {
+      const a0 = k * nr + j;
+      const b0 = k * nr + ((j + 1) % nr);
+      if (end) idx.push(a0, b0, b0 + nr, a0, b0 + nr, a0 + nr);
+      else idx.push(a0, b0 + nr, b0, a0, a0 + nr, b0 + nr);
+    }
+    const cg = new THREE.BufferGeometry();
+    cg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    cg.setAttribute('color', new THREE.Float32BufferAttribute(Array.from({length: pos.length / 3}, () => FIN.white).flat(), 3)); // white like the design's crown and pauldrons
+    cg.setAttribute('glow', new THREE.Float32BufferAttribute(new Float32Array(pos.length / 3), 1));
+    cg.setIndex(idx);
+    cg.computeVertexNormals();
+    const p = mkPart(s.node, `shell-${id}-cap`, `${s.name} ${name}`, 'armor', {tags: s.tags, out: U.clone().multiplyScalar(sgn).applyQuaternion(s.node.getWorldQuaternion(new THREE.Quaternion()).invert()).toArray(), dist: 0.45, stage: 1});
+    const m = plateMat();
+    p.mats.push({m, base: 1, e0: 0});
+    const mesh = new THREE.Mesh(cg, m);
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.userData.part = p;
+    p.group.add(mesh);
+    pickables.push(mesh);
+    added.push(p);
+  }
+  // the head: a glowing V visor across the face and two swept fins, parts of their own on the helmet's surface
+  {
+    const seg = MOLD.segments.find((x) => x.id === 'head');
+    const g = fillMould({...seg, r: new Uint16Array(bytes(seg.r).buffer), c: bytes(seg.c)});
+    g.r = smoothR(g.r, g.nt, g.nth);
+    const [A, U, F, L] = [g.a, g.u, g.f, g.l].map((x) => new V3(...x));
+    const H = (g.nt - 1) * g.dt;
+    // the surface point at height t (m above the mould's first row) and angle th (deg, 0 = the face), lifted by off
+    const at = (t, th, off = 0) => {
+      const fi = Math.min(g.nt - 1.001, Math.max(0, t / g.dt));
+      const fj = ((((th / 360) * g.nth) % g.nth) + g.nth) % g.nth;
+      const i0 = Math.floor(fi);
+      const j0 = Math.floor(fj);
+      const R = (i, j) => g.r[i * g.nth + (j % g.nth)] / 1000;
+      const rad = (R(i0, j0) * (1 - (fi - i0)) + R(i0 + 1, j0) * (fi - i0)) * (1 - (fj - j0)) + (R(i0, j0 + 1) * (1 - (fi - i0)) + R(i0 + 1, j0 + 1) * (fi - i0)) * (fj - j0);
+      const d = F.clone().multiplyScalar(Math.cos((th * Math.PI) / 180)).addScaledVector(L, Math.sin((th * Math.PI) / 180));
+      return A.clone().addScaledVector(U, g.t0 + t).addScaledVector(d, rad + LIFT + off); // on the plates, not under them
+    };
+    const inv = N.head.matrixWorld.clone().invert();
+    // visor: a V of light, low at the centre and rising to the temples, thinning as it goes
+    const vis = mkPart(N.head, 'visor', 'VISOR · OPTICS', 'armor', {tags: ['head'], out: [0, 0.1, 1], dist: 0.5, stage: 1});
+    const pts = [];
+    const ix = [];
+    const W = 18;
+    for (let k = 0; k <= W; k++) {
+      const th = -44 + (88 * k) / W;
+      const w = Math.abs(th) / 44;
+      const tc = H * 0.42 + 0.032 * w;
+      const hh = 0.012 * (1 - 0.5 * w);
+      for (const [tt, off] of [[tc - hh, 0.002], [tc, 0.006], [tc + hh, 0.002]]) pts.push(...at(tt, th, off).applyMatrix4(inv).toArray());
+      if (k) for (let r2 = 0; r2 < 2; r2++) {
+        const a0 = (k - 1) * 3 + r2;
+        const b0 = k * 3 + r2;
+        ix.push(a0, a0 + 1, b0 + 1, a0, b0 + 1, b0);
+      }
+    }
+    const vg = new THREE.BufferGeometry();
+    vg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    vg.setIndex(ix);
+    vg.computeVertexNormals();
+    C.addMesh(vis, vg, 'glow', {args: ['#ffb347', 1.6], shadow: false}).material.side = THREE.DoubleSide;
+    added.push(vis);
+    // fins: thin swept blades on either side of the crown, white with a lit leading edge
+    for (const sd of [-1, 1]) {
+      const fin = mkPart(N.head, `fin-${sd < 0 ? 'R' : 'L'}`, `${sd < 0 ? 'R' : 'L'} HELMET FIN`, 'armor', {tags: ['head'], out: [sd, 0.6, -0.2], dist: 0.55, stage: 1});
+      const shape = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.07, 0), new THREE.Vector2(0.03, 0.17), new THREE.Vector2(0.006, 0.15)]);
+      const fg = new THREE.ExtrudeGeometry(shape, {depth: 0.008, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 1});
+      fg.translate(-0.035, 0, -0.004);
+      const base = at(H * 0.62, sd * 68, -0.004).applyMatrix4(inv);
+      const m = new C.Merge().add(fg, {c: C.COL.white});
+      const mesh = C.addMesh(fin, m.build(), 'armor');
+      mesh.rotation.set(-0.35, sd * 1.25, sd * 0.32, 'YXZ');
+      mesh.position.copy(base);
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.16, 0.004), C.useMat(fin, 'glow', '#ffb347', 1.4));
+      edge.position.set(-0.02, 0.08, 0);
+      edge.rotation.z = -0.2;
+      edge.userData.part = fin;
+      mesh.add(edge);
+      added.push(fin);
+    }
   }
   // a bezel round the reactor window, on the chest surface in front of the core: a part of its own
   {
@@ -363,23 +513,15 @@ export function loadShell(C) {
     const bg = new THREE.TorusGeometry(reactor.r + 0.006, 0.014, 10, 48).toNonIndexed();
     const n = bg.attributes.position.count;
     bg.setAttribute('color', new THREE.Float32BufferAttribute(Array.from({length: n}, () => FIN.graphite).flat(), 3));
+    bg.setAttribute('glow', new THREE.Float32BufferAttribute(new Float32Array(n), 1));
     const m = plateMat();
     b.mats.push({m, base: 1, e0: 0});
     const mesh = new THREE.Mesh(bg, m);
     mesh.castShadow = mesh.receiveShadow = true;
     mesh.userData.part = b;
     b.group.add(mesh);
-    for (let k = 0; k < 8; k++) {
-      const a2 = (k * Math.PI) / 4 + Math.PI / 8;
-      const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.01, 8).rotateX(Math.PI / 2).toNonIndexed(), m);
-      bolt.geometry.setAttribute('color', new THREE.Float32BufferAttribute(Array.from({length: bolt.geometry.attributes.position.count}, () => FIN.bolt).flat(), 3));
-      bolt.position.set(Math.cos(a2) * (reactor.r + 0.006), Math.sin(a2) * (reactor.r + 0.006), 0.012);
-      bolt.userData.part = b;
-      b.group.add(bolt);
-      pickables.push(bolt);
-    }
     pickables.push(mesh);
     added.push(b);
   }
-  return Promise.resolve(added);
+  return added;
 }

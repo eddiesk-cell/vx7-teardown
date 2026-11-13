@@ -56,6 +56,9 @@ export function runLive({film = null} = {}) {
   const style = document.createElement('style');
   style.textContent = `html,body{margin:0;background:#d9dadd;overflow:hidden}#app{position:absolute;left:0;top:0;width:${W}px;height:${H}px;transform-origin:0 0}#gl{touch-action:none;cursor:grab;position:absolute;left:0;top:0;width:${W}px;height:${H}px}#gl.drag{cursor:grabbing}`;
   document.head.appendChild(style);
+  // The kit's template titles the page after its folder and has no icon (the browser then asks for a missing favicon.ico).
+  document.title = 'VX-7 Duelist';
+  document.head.insertAdjacentHTML('beforeend', `<link rel="icon" href="data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1 15 8 8 15 1 8z" fill="#f08a24"/></svg>')}">`);
   const app = document.getElementById('app');
   const canvas = document.createElement('canvas');
   canvas.id = 'gl';

@@ -4,6 +4,8 @@ A product page for a white fighting mech that you can drive like a game characte
 page. He walks when you arrive; turn, zoom and pan around him while he moves; make him run, jump, roll, slash, block
 and shoot; then pull the armor off panel by panel and watch the motors and planetary gears work inside.
 
+**Try it: https://eddiesk-cell.github.io/vx7-teardown/** (a 5.5 MB page; best on a laptop or desktop)
+
 ![VX-7 product page](review/page.png)
 
 ![Fighting](review/fight.png)

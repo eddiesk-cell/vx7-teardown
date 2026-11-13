@@ -17,7 +17,7 @@ try {
   const page = await browser.newPage({viewport: {width: 1600, height: 900}});
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('file://' + path.join(ROOT, 'teardown-out/dist/vx7-live.html'));
+  await page.goto(process.argv[2] || 'file://' + path.join(ROOT, 'teardown-out/dist/vx7-live.html'));
   await page.waitForFunction(() => window.SIM_SHOWN, null, {timeout: 60000});
   const S = () => page.evaluate(() => ({seq: LIVE.S.seq, loop: LIVE.S.loop, orbit: LIVE.S.orbit0, floor: LIVE.S.floorNow, off: {...LIVE.off}, k: LIVE.S.k}));
   await page.waitForTimeout(1500);

@@ -68,7 +68,7 @@ export function createConsole(app, total) {
   add(`<div class="mo" style="position:absolute;left:44px;top:34px;font-size:10px;font-weight:700;letter-spacing:2.6px;color:${C.or}">VX-7 · HEAVY DUELLIST FRAME</div>`);
   add(`<div style="position:absolute;left:42px;top:50px;font-size:40px;font-weight:700;letter-spacing:-1.2px;line-height:1">VX-7 Duelist</div>`);
   add(`<div style="position:absolute;left:44px;top:98px;font-size:13.5px;color:#5d6168;letter-spacing:-.1px">A 3.6 m bipedal duellist. Ten planetary drives. One plasma blade.</div>`);
-  add(`<div class="sm" style="right:44px;top:38px;text-align:right;line-height:15px;letter-spacing:2px">PAINTED 3D SHELL<br>INSIDES BUILT FROM CODE<br>ALL MADE LOCALLY</div>`);
+  add(`<div class="sm" style="right:44px;top:38px;text-align:right;line-height:15px;letter-spacing:2px">ARMOR BUILT IN CODE<br>ON THE PAINTED DESIGN<br>ALL MADE LOCALLY</div>`);
 
   // ---- specifications
   panel(40, 140, 272, 244, 'SPECIFICATIONS');

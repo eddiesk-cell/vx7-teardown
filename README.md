@@ -22,10 +22,14 @@ and shoot; then pull the armor off plate by plate and watch the motors and plane
   `vx7-shared/assets/vx7-mold.json`. `vx7-shared/shell.js` builds **about 340 armor plates** from that mould:
   curved panels on panel lines (bands across the bone, sectors round it, each nudged to a painted seam) that meet edge
   to edge with shared normals, so the assembled armor reads as one smooth shell and a seam shows only when a plate
-  comes off. The plates wear the design's paint: `split.py` also unrolls the painted shell round each bone into one
-  atlas (0.625 degrees x 2.5 mm a pixel), so there are no texture seams. Code adds the rest: a dark 12 mm edge on every
-  plate, light lines along the outer limbs and the chest, a glowing V visor, two swept fins, domed caps on the helmet
-  and shoulders, and a window for the reactor. Plates at rest draw as one merged piece per joint and split back into
+  comes off. As in the design, white plates cover the front and outer faces, and the joints, the faces toward the body,
+  the waist, the neck and the places the design paints dark are left open as sunken, ribbed graphite actuator sleeves
+  with piston rods or an orange cable down their spine. The plates wear the design's paint: `split.py` also unrolls the
+  painted shell round each bone into one atlas (0.625 degrees x 2.5 mm a pixel), so there are no texture seams. Code
+  adds the rest: an engraved groove round every plate and an inset line inside it, one detail per plate (a vent, a dark
+  hatch, an orange tab, a split line, hazard chevrons or a stencil mark), a dark 22 mm edge, light lines along the outer
+  limbs and the chest, a glowing V visor, two swept fins, domed caps on the helmet and shoulders, and a window for the
+  reactor. Plates at rest draw as one merged piece per joint and split back into
   parts the moment one moves.
 - **Inside: built from code** (`vx7-shared/inner.js`, `mech.js`): graphite frame, spine, cables, the chest reactor, knee /
   hock / elbow hydraulics (bore 50, rod 28, stroke 180 mm, rod length from the law of cosines), the shield and the plasma blade.
